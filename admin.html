@@ -503,6 +503,10 @@
             <div class="att-stat"><div class="av red" id="ms-absent">—</div><div class="al">Days Absent</div></div>
             <div class="att-stat"><div class="av orange" id="ms-hours">—</div><div class="al">Total Hours</div></div>
           </div>
+          <div id="activeSessionBanner" style="display:none; background:rgba(76,175,130,0.08); border:1px solid rgba(76,175,130,0.25); border-radius:10px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <span style="font-size:13px; color:var(--green)">🟢 Session currently active</span>
+            <button class="btn btn-red btn-sm" onclick="forceLogoutStudent()">Force Log Out</button>
+          </div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th></tr></thead>
@@ -582,6 +586,7 @@ window.sendWelcomeEmail = sendWelcomeEmail;
 window.toggleModuleRow = toggleModuleRow;
 window.toggleModuleSession = toggleModuleSession;
 window.saveModulesOnly = saveModulesOnly;
+window.forceLogoutStudent = forceLogoutStudent;
 
 // ── TOAST ──
 function showToast(msg, type='') {
@@ -1033,6 +1038,17 @@ async function loadModalAttendance(docId, s) {
   document.getElementById('ms-absent').textContent=Math.max(0,totalDays-presentDays.size);
   document.getElementById('ms-hours').textContent=totalHrs.toFixed(1)+'h';
 
+  // Active session detection for Force Log Out
+  const activeRecord = records.find(r => !r.checkOut);
+  const banner = document.getElementById('activeSessionBanner');
+  if (activeRecord) {
+    banner.style.display = 'flex';
+    banner.dataset.attendanceId = activeRecord.id;
+  } else {
+    banner.style.display = 'none';
+    banner.dataset.attendanceId = '';
+  }
+
   const tb=document.getElementById('modalAttTable'); tb.innerHTML='';
   if(!records.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--text3)">No records.</td></tr>';return;}
   records.forEach(r=>{
@@ -1044,6 +1060,23 @@ async function loadModalAttendance(docId, s) {
 </td>`;
     tb.appendChild(tr);
   });
+}
+
+async function forceLogoutStudent() {
+  const banner = document.getElementById('activeSessionBanner');
+  const attId = banner.dataset.attendanceId;
+  if (!attId) { showToast('No active session found', 'error'); return; }
+  if (!confirm('Force log out this student? This will close their active session right now.')) return;
+  try {
+    await updateDoc(doc(db,'cadd_attendance',attId), {
+      checkOut: Timestamp.now(),
+      autoLogout: false,
+      adminForcedLogout: true
+    });
+    showToast('Student logged out successfully', 'success');
+    const s = allStudents.find(x => x.docId === editingStudentId);
+    await loadModalAttendance(editingStudentId, s);
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
 }
 
 async function saveEditStudent() {
