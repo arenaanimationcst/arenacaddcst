@@ -414,10 +414,23 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const CENTRE_LAT = 18.938080;
-const CENTRE_LNG = 72.834907;
-const RADIUS_M = 100;
-const AUTO_LOGOUT_HRS = 8;
+// ── LOCATION SETTINGS ──
+// TEST_MODE: true = use your home coordinates for testing right now
+//            false = use real CADDesk CST centre coordinates (switch this Monday at office)
+const TEST_MODE = true;
+
+const CST_LAT = 18.938080;
+const CST_LNG = 72.834907;
+const CST_RADIUS = 150;
+
+const HOME_LAT = 18.96543509902187;
+const HOME_LNG = 72.83028537803203;
+const HOME_RADIUS = 150;
+
+const CENTRE_LAT = TEST_MODE ? HOME_LAT : CST_LAT;
+const CENTRE_LNG = TEST_MODE ? HOME_LNG : CST_LNG;
+const RADIUS_M = TEST_MODE ? HOME_RADIUS : CST_RADIUS;
+const AUTO_LOGOUT_HRS = 3;
 
 let currentStudent = null;
 let activeSession = null;
