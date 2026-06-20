@@ -2,8 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"/>
   <title>CADDesk CST — Student Attendance</title>
+
+  <!-- PWA: Manifest -->
+  <link rel="manifest" href="manifest.json"/>
+  <meta name="theme-color" content="#2E3542"/>
+
+  <!-- PWA: iOS-specific -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="CADDesk CST"/>
+  <link rel="apple-touch-icon" href="icons/icon-180.png"/>
+
+  <!-- PWA: Android/Chrome icon -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"/>
+
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
   <style>
     :root {
@@ -613,6 +627,16 @@ function doLogout() {
 
 document.getElementById('loginPw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 document.getElementById('loginId').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+</script>
+
+<!-- PWA: Register Service Worker (separate non-module script, runs independently) -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .catch(err => console.warn('Service worker registration failed:', err));
+    });
+  }
 </script>
 </body>
 </html>
