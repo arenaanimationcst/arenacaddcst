@@ -476,12 +476,32 @@ function getLocation() {
   return new Promise((res, rej) => {
     if (!navigator.geolocation) { rej(new Error('Geolocation not supported')); return; }
 
-    // Single high-accuracy request with generous timeout and tolerance for a recent fix
-    // (a fix from the last 10 seconds is still accurate enough and avoids forcing a slow fresh GPS lock every time)
+    let settled = false;
+
+    // Hard safety-net timeout: some Android Chrome builds never fire either callback
+    // after the permission prompt, leaving the browser's own `timeout` option useless.
+    // This guarantees the promise always resolves/rejects within 15s no matter what.
+    const safetyTimer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        rej(new Error('TIMEOUT_NO_RESPONSE'));
+      }
+    }, 15000);
+
     navigator.geolocation.getCurrentPosition(
-      p => res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
-      e => rej(e),
-      { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
+      p => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
+        res({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy });
+      },
+      e => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
+        rej(e);
+      },
+      { enableHighAccuracy: true, timeout: 14000, maximumAge: 10000 }
     );
   });
 }
@@ -690,7 +710,11 @@ async function handleAttendanceAction() {
     }
     await loadStats();
   } catch(e) {
-    if (e.code===1) {
+    if (e.message === 'TIMEOUT_NO_RESPONSE') {
+      document.getElementById('actionCard').style.display='none';
+      document.getElementById('locationDenied').style.display='block';
+      showToast('Location took too long to respond. Tap "Try Again".','error');
+    } else if (e.code===1) {
       document.getElementById('actionCard').style.display='none';
       document.getElementById('locationDenied').style.display='block';
       showToast('Location permission denied. Please allow location access.','error');
@@ -703,6 +727,8 @@ async function handleAttendanceAction() {
       document.getElementById('locationDenied').style.display='block';
       showToast('Location request timed out. Please try again.','error');
     } else {
+      document.getElementById('actionCard').style.display='none';
+      document.getElementById('locationDenied').style.display='block';
       showToast('Error: '+e.message,'error');
     }
   }
