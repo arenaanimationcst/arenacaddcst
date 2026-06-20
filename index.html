@@ -356,6 +356,7 @@
         <div class="icon">📍</div>
         <h3>Not Inside CADDesk CST</h3>
         <p>Attendance can only be marked from inside the CADDesk CST centre at Fort, Mumbai.<br><br>Please allow location access and make sure you are physically at the centre.<br><br><strong>On laptop?</strong> Laptops use WiFi-based location which can be inaccurate. Mobile phones with GPS work best for marking attendance.</p>
+        <div id="debugLocBox" style="margin-top:16px; background:rgba(255,255,255,0.04); border:1px solid var(--cadd-border); border-radius:9px; padding:14px; text-align:left; font-size:12px; color:var(--text-secondary); line-height:1.8; display:none"></div>
         <button class="btn-primary" style="margin-top:18px;width:auto;padding:10px 24px" onclick="retryLocation()">Try Again</button>
       </div>
     </div>
@@ -632,6 +633,18 @@ async function handleAttendanceAction() {
       document.getElementById('locationDenied').style.display='block';
       const accNote = pos.accuracy ? ` (GPS accuracy: ±${Math.round(pos.accuracy)}m)` : '';
       showToast(`You are ${Math.round(dist)}m away. Must be within ${RADIUS_M}m of CADDesk CST.${accNote}`,'error');
+
+      const debugBox = document.getElementById('debugLocBox');
+      debugBox.style.display = 'block';
+      debugBox.innerHTML = `
+        <strong>Debug Info (for testing)</strong><br>
+        Your location: ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}<br>
+        Target location: ${CENTRE_LAT.toFixed(6)}, ${CENTRE_LNG.toFixed(6)}<br>
+        Distance: ${Math.round(dist)}m (allowed: ${RADIUS_M}m)<br>
+        GPS accuracy: ${pos.accuracy ? '±'+Math.round(pos.accuracy)+'m' : 'unknown'}<br>
+        Test mode: ${TEST_MODE ? 'ON (home coords)' : 'OFF (CST coords)'}
+      `;
+
       btn.disabled=false;
       return;
     }
