@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CADDesk CST — Admin Panel</title>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
       --orange:#F47920; --orange-dark:#D4641A;
@@ -163,6 +164,7 @@
       transition:all 0.15s;user-select:none;
     }
     .mp-session.done{background:rgba(76,175,130,0.15);border-color:rgba(76,175,130,0.35);color:var(--green);}
+    .mp-session.pending{background:rgba(240,192,64,0.15);border-color:rgba(240,192,64,0.35);color:var(--yellow);}
     .mp-session input{width:auto;accent-color:var(--green);cursor:pointer;}
 
     /* ATTENDANCE VIEW */
@@ -192,6 +194,7 @@
       .f-span2{grid-column:span 1;}
     }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -228,6 +231,8 @@
     <div class="nav-section">Students</div>
     <div class="nav-item" data-page="students" onclick="showPage('students')"><span class="icon">👤</span> All Students</div>
     <div class="nav-item" data-page="addStudent" onclick="showPage('addStudent')"><span class="icon">➕</span> Add Student</div>
+    <div class="nav-section">Faculty</div>
+    <div class="nav-item" data-page="facultyAccounts" onclick="showPage('facultyAccounts')"><span class="icon">🧑‍🏫</span> Faculty Accounts</div>
     <div class="nav-section">Attendance</div>
     <div class="nav-item" data-page="attendance" onclick="showPage('attendance')"><span class="icon">📋</span> Attendance Log</div>
     <div class="nav-section">Settings</div>
@@ -370,7 +375,13 @@
 
     <!-- ATTENDANCE LOG -->
     <div class="page" id="page-attendance">
-      <div class="page-header"><h1>Attendance Log</h1></div>
+      <div class="page-header">
+        <h1>Attendance Log</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="exportAttendanceExcel()">📊 Export Excel</button>
+          <button class="btn btn-ghost" onclick="exportAttendancePDF()">📄 Export PDF</button>
+        </div>
+      </div>
       <div class="search-row">
         <input type="text" id="attSearch" placeholder="Search by student name or ID…" oninput="filterAttendance()"/>
         <input type="date" id="attDateFrom"/>
@@ -398,18 +409,76 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-title">Faculty</div>
+          <div class="card-title">Faculty (Quick Labels)</div>
           <div id="facultyList" style="margin-bottom:14px"></div>
           <div style="display:flex;gap:8px">
             <input type="text" id="newFaculty" placeholder="Faculty name" style="flex:1;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none"/>
             <button class="btn btn-orange" onclick="addFaculty()">Add</button>
           </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5">This is the old simple name list. For faculty who need to log in and approve student sessions, use <strong>Faculty Accounts</strong> in the sidebar instead.</div>
         </div>
+      </div>
+    </div>
+
+    <!-- FACULTY ACCOUNTS -->
+    <div class="page" id="page-facultyAccounts">
+      <div class="page-header">
+        <h1>Faculty Accounts</h1>
+        <button class="btn btn-orange" onclick="openFacultyModal()">+ Add Faculty</button>
+      </div>
+      <div class="search-row">
+        <input type="text" id="facultySearchInput" placeholder="Search by name or ID…" oninput="filterFacultyTable()"/>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Faculty ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="facultyTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
 
   </div>
 </div>
+
+<!-- FACULTY MODAL (Add / Edit) -->
+<div class="modal-overlay" id="facultyModal" style="display:none">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="facultyModalTitle">Add Faculty</h3>
+      <button class="modal-close" onclick="closeModal('facultyModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="f-group f-span2"><label>Full Name *</label><input type="text" id="fac-name" oninput="generateFacultyId()" placeholder="e.g. Rahul Sharma"/></div>
+        <div class="f-group"><label>Phone</label><input type="tel" id="fac-phone" placeholder="10-digit number"/></div>
+        <div class="f-group"><label>Email</label><input type="email" id="fac-email" placeholder="faculty@email.com"/></div>
+        <div class="f-group"><label>Status</label>
+          <select id="fac-status">
+            <option value="active">Active</option>
+            <option value="deactivated">Deactivated</option>
+          </select>
+        </div>
+        <div class="f-group f-span2" id="facCredentialsBlock">
+          <label>Login Credentials</label>
+          <div class="id-preview">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div>
+                <div class="id-val" id="facIdDisplay">—</div>
+                <div class="id-sub">Password: <strong id="facPwDisplay">••••••••</strong></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="toggleFacultyPassword()" id="facTogglePwBtn">Show</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+        <button class="btn btn-orange" onclick="saveFaculty()">Save Faculty</button>
+        <button class="btn btn-red" id="facDeleteBtn" style="display:none" onclick="deleteFacultyConfirm()">Delete Faculty</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- STUDENT MODAL (Edit / View) -->
 <div class="modal-overlay" id="studentModal" style="display:none">
@@ -543,6 +612,7 @@ const db = getFirestore(app);
 
 const ADMIN_PW = 'Arena@Faiz786';
 let allStudents = [], allAttendance = [], slots = [], facultyList = [];
+let allFaculty = [];
 let editingStudentId = null;
 let ns_selectedDays = new Set();
 let ed_selectedDays = new Set();
@@ -560,6 +630,46 @@ const MODULE_CATALOGUE = [
   { id:'photoshop', name:'Photoshop', category:'Graphics', defaultWeeks:3 },
   { id:'lumion', name:'Lumion', category:'Visualisation', defaultWeeks:2 }
 ];
+
+// Real syllabus content — session-by-session breakdown for modules that have a defined curriculum.
+// Modules not listed here fall back to a generic "Session N" placeholder until their syllabus is added.
+const SYLLABUS_CATALOGUE = {
+  autocad2d_civil: {
+    totalSessions: 16,
+    sessions: [
+      { num:1, title:'Introduction & Projections', topics:'Introduction: About CADD centre, AutoCAD History, Engineering Drawings. Projections (First & Third angle), Views (Orthographic, Isometric & Perspective). Exploring GUI, Workspaces. Co-ordinate systems.' },
+      { num:2, title:'Drawing Settings & Display Control', topics:'Drawing settings: Units, Limits, Options, Application status Bar. Display Control: Zoom, Pan, Regen, Clean Screen & Drafting setting.' },
+      { num:3, title:'Object Properties & File Management', topics:'Object Properties: Color, Linetype, Ltscale, Lineweight. File Management: New, Qnew, Open, Save, Save as, Close, Exit, Quit.' },
+      { num:4, title:'Drawing & Modify Tools', topics:'Drawing Tools: Line, Xline, Polyline, Circle, Rectangle, Arc, Ellipse, Polygon, Donut. Modify Tools: Trim, Extend, Erase, Undo, Redo, Join, Explode, Offset, Move, Copy, Rotate, Mirror, Scale, Stretch, Lengthen, Break, Array, Align, Fillet, Chamfer.' },
+      { num:5, title:'Dimensioning', topics:'Dimension Setting: Dimension Style. Dimension: Linear, Aligned, Radius, Diameter, Center Mark, Angle, Arc length, Jogged radius, Ordinate dimensions, Continuous & Baseline dimension, Dimension Space, Dimension Break, Inspection, Tolerance.' },
+      { num:6, title:'Leader & Dimension Editing', topics:'Leader: Leader, Qleader, Mleader, Multi leader style, Add leader, Align Leader lines, Collect Leader. Dimension Editing: Dim edit, dimtedit, Dimension Associative, Reassociate.' },
+      { num:7, title:'Measurements & Annotation', topics:'Measurements: Divide, Measure. Annotation Tools: Text Style, Mtext, Scaletext, Spell.' },
+      { num:8, title:'Advanced Drawing & Modify Tools', topics:'Drawing Tools: Multiline, Pline, Spline, Ray, Wipeout, Revision cloud. Modify Tools: MLstyle, MLedit, Pedit, Splinedit, Grip Editing.' },
+      { num:9, title:'Civil Drawing & Project', topics:'Civil Drawing: Isometric View Drawing, Perspective View Drawing (one point & Two point). Project: Perspective View - Building Exterior (Two point perspective) & Interior (One point perspective).' },
+      { num:10, title:'Hatching & Inquiry Commands', topics:'Hatching utilities: Hatch, Hatchedit, Gradient. Inquiry commands: Id, Dist, List, Radius, Angle, Area, Volume, Fill, Fill mode.' },
+      { num:11, title:'Layer Management', topics:'Layer Management: Adding / Removing Layers, New Property Filter, New Group Filter, Layer States Manager.' },
+      { num:12, title:'Selection Methods & Tables', topics:'Selection Methods: Object Selection Methods, Qselect, Filter. Table: Table, Tablestyle, Tabledit.' },
+      { num:13, title:'Symbol & BOM Creation - Blocks', topics:'Symbol & BOM Creation: Block, Wblock, Insert. Attribute: Attdef, Attedit, Eattedit, Attdisp, Attdia.' },
+      { num:14, title:'Dynamic Blocks & Parametric Modeling', topics:'Symbol & BOM Creation: Dynamic Block. Parametric Modeling: Geometric Constraint, Dimensional Constraint, Design Centre, Tool Palette.' },
+      { num:15, title:'OLE, Copy-Paste & External References', topics:'OLE concepts: Insert object, Olelinks, Olescale. Copy & Paste Concepts: Copy, Copybase, Copylink, Pasteclip, Pastespecial, Pasteblock, Paste original. External references: Xref, Xbind, Refedit.' },
+      { num:16, title:'File Setup & Plot Control', topics:'File Setup: Hyperlink, Etransmit, Publish. Plot control: Introduction to plotting, Page setup, Plot Styles, Layout, Mview, Mspace, Pspace.' }
+    ]
+  }
+};
+
+// Helper: get session list for a module — real syllabus if available, else generic placeholders
+function getSyllabusForModule(modId, weeks) {
+  if (SYLLABUS_CATALOGUE[modId]) {
+    return SYLLABUS_CATALOGUE[modId].sessions;
+  }
+  // Fallback: generic numbered sessions based on duration (2 sessions/week default)
+  const count = Math.max(1, (weeks || 1) * 2);
+  const generic = [];
+  for (let i = 1; i <= count; i++) {
+    generic.push({ num: i, title: `Session ${i}`, topics: '' });
+  }
+  return generic;
+}
 
 // ── GLOBALS ──
 window.checkGate = checkGate;
@@ -584,9 +694,19 @@ window.toggleEdPassword = toggleEdPassword;
 window.quickViewCreds = quickViewCreds;
 window.sendWelcomeEmail = sendWelcomeEmail;
 window.toggleModuleRow = toggleModuleRow;
-window.toggleModuleSession = toggleModuleSession;
+window.openSessionDetailFromAdmin = openSessionDetailFromAdmin;
+window.undoApprovedSession = undoApprovedSession;
 window.saveModulesOnly = saveModulesOnly;
 window.forceLogoutStudent = forceLogoutStudent;
+window.exportAttendanceExcel = exportAttendanceExcel;
+window.exportAttendancePDF = exportAttendancePDF;
+window.openFacultyModal = openFacultyModal;
+window.generateFacultyId = generateFacultyId;
+window.toggleFacultyPassword = toggleFacultyPassword;
+window.saveFaculty = saveFaculty;
+window.deleteFacultyConfirm = deleteFacultyConfirm;
+window.filterFacultyTable = filterFacultyTable;
+window.quickFacultyStatusChange = quickFacultyStatusChange;
 
 // ── TOAST ──
 function showToast(msg, type='') {
@@ -634,6 +754,13 @@ function renderModulePicker(containerId, checkedMap) {
   MODULE_CATALOGUE.forEach(mod => {
     const isChecked = checkedMap && checkedMap[mod.id];
     const weeks = isChecked ? checkedMap[mod.id].weeks : mod.defaultWeeks;
+    const currentFacultyId = isChecked && checkedMap[mod.id].facultyAssignments && checkedMap[mod.id].facultyAssignments.length
+      ? checkedMap[mod.id].facultyAssignments[checkedMap[mod.id].facultyAssignments.length - 1].facultyId
+      : '';
+    const facultyOptions = allFaculty
+      .filter(f => f.status !== 'deactivated')
+      .map(f => `<option value="${f.docId}" ${f.docId===currentFacultyId?'selected':''}>${f.name}</option>`)
+      .join('');
     const row = document.createElement('div');
     row.className = 'module-row' + (isChecked ? ' checked' : '');
     row.dataset.modId = mod.id;
@@ -642,7 +769,11 @@ function renderModulePicker(containerId, checkedMap) {
       <span class="m-name">${mod.name}</span>
       <span class="m-cat">${mod.category}</span>
       <span class="m-dur-label">wks</span>
-      <input type="number" min="1" max="52" value="${weeks}" ${isChecked ? '' : 'disabled'}/>
+      <input type="number" min="1" max="52" value="${weeks}" ${isChecked ? '' : 'disabled'} class="m-weeks-input"/>
+      <select class="m-faculty-select" ${isChecked ? '' : 'disabled'} style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:#fff;padding:4px 6px;font-size:11px;max-width:110px;">
+        <option value="">No faculty</option>
+        ${facultyOptions}
+      </select>
     `;
     container.appendChild(row);
   });
@@ -650,26 +781,76 @@ function renderModulePicker(containerId, checkedMap) {
 
 function toggleModuleRow(checkbox) {
   const row = checkbox.closest('.module-row');
-  const numInput = row.querySelector('input[type="number"]');
+  const numInput = row.querySelector('.m-weeks-input');
+  const facSelect = row.querySelector('.m-faculty-select');
   if (checkbox.checked) {
     row.classList.add('checked');
     numInput.disabled = false;
+    if (facSelect) facSelect.disabled = false;
   } else {
     row.classList.remove('checked');
     numInput.disabled = true;
+    if (facSelect) facSelect.disabled = true;
   }
 }
 
-function getSelectedModules(containerId) {
+function getSelectedModules(containerId, existingModules) {
   const container = document.getElementById(containerId);
   const result = {};
   container.querySelectorAll('.module-row').forEach(row => {
     const cb = row.querySelector('input[type="checkbox"]');
     if (cb.checked) {
       const modId = row.dataset.modId;
-      const weeks = parseInt(row.querySelector('input[type="number"]').value) || 1;
+      const weeks = parseInt(row.querySelector('.m-weeks-input').value) || 1;
+      const facSelect = row.querySelector('.m-faculty-select');
+      const selectedFacultyId = facSelect ? facSelect.value : '';
       const modDef = MODULE_CATALOGUE.find(m => m.id === modId);
-      result[modId] = { name: modDef.name, category: modDef.category, weeks, sessionsDone: [] };
+      const syllabusSessions = getSyllabusForModule(modId, weeks);
+      const totalSessions = syllabusSessions.length;
+
+      const existing = existingModules && existingModules[modId];
+
+      // Build/preserve facultyAssignments — append a new assignment range only if faculty actually changed
+      let facultyAssignments = existing && existing.facultyAssignments ? [...existing.facultyAssignments] : [];
+      const lastAssignment = facultyAssignments[facultyAssignments.length - 1];
+      const lastFacultyId = lastAssignment ? lastAssignment.facultyId : null;
+
+      if (selectedFacultyId && selectedFacultyId !== lastFacultyId) {
+        const facultyObj = allFaculty.find(f => f.docId === selectedFacultyId);
+        // Determine the starting session for this new assignment: first un-approved session, or session 1 if none yet
+        const existingSessions = existing && existing.sessions ? existing.sessions : {};
+        let fromSession = 1;
+        for (let n = 1; n <= totalSessions; n++) {
+          if (existingSessions[n] && existingSessions[n].approved) { fromSession = n + 1; }
+        }
+        // Close out the previous assignment's range at fromSession - 1 if one existed
+        if (lastAssignment) lastAssignment.toSession = fromSession - 1;
+        facultyAssignments.push({
+          facultyId: selectedFacultyId,
+          facultyName: facultyObj ? facultyObj.name : 'Unknown',
+          fromSession: fromSession,
+          toSession: totalSessions
+        });
+      } else if (!selectedFacultyId) {
+        facultyAssignments = existing && existing.facultyAssignments ? existing.facultyAssignments : [];
+      }
+
+      // Build sessions map — preserve existing progress, add new empty entries up to totalSessions
+      const sessions = existing && existing.sessions ? { ...existing.sessions } : {};
+      for (let n = 1; n <= totalSessions; n++) {
+        if (!sessions[n]) {
+          sessions[n] = { studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false };
+        }
+      }
+
+      result[modId] = {
+        name: modDef.name,
+        category: modDef.category,
+        weeks,
+        totalSessions,
+        facultyAssignments,
+        sessions
+      };
     }
   });
   return result;
@@ -770,6 +951,164 @@ async function loadStudents() {
   const snap=await getDocs(collection(db,'cadd_students'));
   allStudents=snap.docs.map(d=>({docId:d.id,...d.data()}));
   renderStudents(allStudents);
+}
+
+// ── FACULTY ACCOUNTS (login-capable, separate from old quick-label list) ──
+let editingFacultyId = null;
+
+async function loadFacultyAccounts() {
+  try {
+    const snap = await getDocs(collection(db,'cadd_faculty'));
+    allFaculty = snap.docs.map(d => ({ docId: d.id, ...d.data() }));
+    renderFacultyTable(allFaculty);
+  } catch(e) {
+    console.error('Load faculty error:', e);
+    const tb = document.getElementById('facultyTable');
+    if (tb) tb.innerHTML = `<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Error loading faculty: ${e.message}</td></tr>`;
+  }
+}
+
+function renderFacultyTable(list) {
+  const tb = document.getElementById('facultyTable');
+  if (!tb) return;
+  tb.innerHTML = '';
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No faculty accounts yet. Click "+ Add Faculty" to create one.</td></tr>';
+    return;
+  }
+  list.forEach(f => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code style="color:var(--orange);font-size:12px">${f.facultyId||'—'}</code></td>
+      <td>${f.name||'—'}</td>
+      <td>${f.phone||'—'}</td>
+      <td>${f.email||'—'}</td>
+      <td><span class="badge ${f.status||'active'}">${(f.status||'active').replace('_',' ')}</span></td>
+      <td style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="openFacultyModal('${f.docId}')">Edit</button>
+        <select class="btn btn-ghost btn-sm" style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;cursor:pointer;" onchange="quickFacultyStatusChange('${f.docId}',this.value)">
+          <option value="">Status…</option>
+          <option value="active">✅ Active</option>
+          <option value="deactivated">❌ Deactivate</option>
+        </select>
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function filterFacultyTable() {
+  const s = document.getElementById('facultySearchInput').value.toLowerCase();
+  const filtered = allFaculty.filter(f =>
+    (f.name||'').toLowerCase().includes(s) || (f.facultyId||'').toLowerCase().includes(s)
+  );
+  renderFacultyTable(filtered);
+}
+
+async function quickFacultyStatusChange(docId, status) {
+  if (!status) return;
+  await updateDoc(doc(db,'cadd_faculty',docId), { status });
+  const f = allFaculty.find(x => x.docId === docId);
+  if (f) f.status = status;
+  filterFacultyTable();
+  showToast('Faculty status updated to ' + status, 'success');
+}
+
+function generateFacultyId() {
+  const name = document.getElementById('fac-name').value.trim();
+  if (!name) { document.getElementById('facIdDisplay').textContent='—'; document.getElementById('facPwDisplay').textContent='••••••••'; return; }
+  const first = name.split(' ')[0].toLowerCase().replace(/[^a-z]/g,'');
+  const num = Math.floor(100+Math.random()*900);
+  const fid = first+'@'+num;
+  const pw = first.charAt(0).toUpperCase()+first.slice(1)+'@'+num;
+  document.getElementById('facIdDisplay').textContent = fid;
+  document.getElementById('facIdDisplay').dataset.generated = fid;
+  document.getElementById('facPwDisplay').textContent = '••••••••';
+  document.getElementById('facPwDisplay').dataset.real = pw;
+}
+
+function toggleFacultyPassword() {
+  const el = document.getElementById('facPwDisplay');
+  const btn = document.getElementById('facTogglePwBtn');
+  if (el.textContent === '••••••••') {
+    el.textContent = el.dataset.real || '—';
+    btn.textContent = 'Hide';
+  } else {
+    el.textContent = '••••••••';
+    btn.textContent = 'Show';
+  }
+}
+
+function openFacultyModal(docId) {
+  editingFacultyId = docId || null;
+  document.getElementById('facultyModalTitle').textContent = docId ? 'Edit Faculty' : 'Add Faculty';
+  document.getElementById('facDeleteBtn').style.display = docId ? 'inline-block' : 'none';
+
+  if (docId) {
+    const f = allFaculty.find(x => x.docId === docId);
+    if (!f) return;
+    document.getElementById('fac-name').value = f.name || '';
+    document.getElementById('fac-phone').value = f.phone || '';
+    document.getElementById('fac-email').value = f.email || '';
+    document.getElementById('fac-status').value = f.status || 'active';
+    document.getElementById('facIdDisplay').textContent = f.facultyId || '—';
+    document.getElementById('facIdDisplay').dataset.generated = f.facultyId || '';
+    document.getElementById('facPwDisplay').textContent = '••••••••';
+    document.getElementById('facPwDisplay').dataset.real = f.password || '';
+    document.getElementById('facTogglePwBtn').textContent = 'Show';
+  } else {
+    document.getElementById('fac-name').value = '';
+    document.getElementById('fac-phone').value = '';
+    document.getElementById('fac-email').value = '';
+    document.getElementById('fac-status').value = 'active';
+    document.getElementById('facIdDisplay').textContent = '—';
+    document.getElementById('facIdDisplay').dataset.generated = '';
+    document.getElementById('facPwDisplay').textContent = '••••••••';
+    document.getElementById('facPwDisplay').dataset.real = '';
+    document.getElementById('facTogglePwBtn').textContent = 'Show';
+  }
+  document.getElementById('facultyModal').style.display = 'flex';
+}
+
+async function saveFaculty() {
+  const name = document.getElementById('fac-name').value.trim();
+  const phone = document.getElementById('fac-phone').value.trim();
+  const email = document.getElementById('fac-email').value.trim();
+  const status = document.getElementById('fac-status').value;
+
+  if (!name) { showToast('Enter faculty name', 'error'); return; }
+
+  try {
+    if (editingFacultyId) {
+      // Editing existing — keep existing facultyId/password unless none was ever generated
+      const data = { name, phone, email, status };
+      await updateDoc(doc(db,'cadd_faculty',editingFacultyId), data);
+      const i = allFaculty.findIndex(x => x.docId === editingFacultyId);
+      if (i !== -1) allFaculty[i] = { ...allFaculty[i], ...data };
+      showToast('Faculty updated!', 'success');
+    } else {
+      // New faculty — must have generated credentials
+      const facultyId = document.getElementById('facIdDisplay').dataset.generated;
+      const password = document.getElementById('facPwDisplay').dataset.real;
+      if (!facultyId || !password) { showToast('Could not generate credentials — check name field', 'error'); return; }
+      const data = { name, phone, email, status, facultyId, password, createdAt: Timestamp.now() };
+      await addDoc(collection(db,'cadd_faculty'), data);
+      showToast('Faculty created! ID: ' + facultyId, 'success');
+    }
+    closeModal('facultyModal');
+    await loadFacultyAccounts();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function deleteFacultyConfirm() {
+  if (!editingFacultyId) return;
+  if (!confirm('Delete this faculty account permanently? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db,'cadd_faculty',editingFacultyId));
+    allFaculty = allFaculty.filter(x => x.docId !== editingFacultyId);
+    showToast('Faculty deleted', 'warning');
+    closeModal('facultyModal');
+    filterFacultyTable();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 function renderStudents(list) {
@@ -933,25 +1272,38 @@ function renderSyllabusProgress(modules) {
   wrap.innerHTML = '';
   modIds.forEach(modId => {
     const mod = modules[modId];
-    const totalSessions = (mod.weeks || 1) * 2; // 2 sessions per week as a working default
-    const doneCount = (mod.sessionsDone || []).length;
-    const pct = Math.min(100, Math.round((doneCount / totalSessions) * 100));
+    const syllabusSessions = getSyllabusForModule(modId, mod.weeks);
+    const totalSessions = mod.totalSessions || syllabusSessions.length;
+    const sessions = mod.sessions || {};
+    const approvedCount = Object.values(sessions).filter(s => s.approved).length;
+    const pendingCount = Object.values(sessions).filter(s => s.studentTicked && !s.approved).length;
+    const pct = Math.min(100, Math.round((approvedCount / totalSessions) * 100));
+
+    const facultyInfo = (mod.facultyAssignments && mod.facultyAssignments.length)
+      ? mod.facultyAssignments.map(fa => `${fa.facultyName} (S${fa.fromSession}-${fa.toSession === totalSessions ? totalSessions : fa.toSession})`).join(', ')
+      : 'No faculty assigned';
 
     const card = document.createElement('div');
     card.className = 'module-progress-card';
     let sessionsHtml = '';
     for (let i = 1; i <= totalSessions; i++) {
-      const isDone = (mod.sessionsDone || []).includes(i);
-      sessionsHtml += `<label class="mp-session ${isDone?'done':''}">
-        <input type="checkbox" ${isDone?'checked':''} onchange="toggleModuleSession('${modId}', ${i}, this.checked)"/>
-        S${i}
+      const sess = sessions[i] || {};
+      let stateClass = '';
+      let stateLabel = `S${i}`;
+      if (sess.approved) { stateClass = 'done'; stateLabel = `✅ S${i}`; }
+      else if (sess.studentTicked) { stateClass = 'pending'; stateLabel = `⏳ S${i}`; }
+      const syllabusInfo = syllabusSessions.find(ss => ss.num === i);
+      const title = syllabusInfo ? syllabusInfo.title : `Session ${i}`;
+      sessionsHtml += `<label class="mp-session ${stateClass}" title="${title}" onclick="event.preventDefault(); openSessionDetailFromAdmin('${modId}', ${i})">
+        ${stateLabel}
       </label>`;
     }
     card.innerHTML = `
       <div class="mp-header">
         <span class="mp-name">${mod.name}</span>
-        <span class="mp-meta">${doneCount}/${totalSessions} sessions · ${mod.weeks} wks</span>
+        <span class="mp-meta">${approvedCount}/${totalSessions} approved${pendingCount ? ` · ${pendingCount} pending` : ''} · ${mod.weeks} wks</span>
       </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:8px">👨‍🏫 ${facultyInfo}</div>
       <div class="mp-bar-track"><div class="mp-bar-fill" style="width:${pct}%"></div></div>
       <div class="mp-sessions">${sessionsHtml}</div>
     `;
@@ -959,32 +1311,46 @@ function renderSyllabusProgress(modules) {
   });
 }
 
-async function toggleModuleSession(modId, sessionNum, isChecked) {
+function openSessionDetailFromAdmin(modId, sessionNum) {
   const s = allStudents.find(x => x.docId === editingStudentId);
   if (!s || !s.modules || !s.modules[modId]) return;
-  const mod = s.modules[modId];
-  mod.sessionsDone = mod.sessionsDone || [];
-  if (isChecked) {
-    if (!mod.sessionsDone.includes(sessionNum)) mod.sessionsDone.push(sessionNum);
+  const sess = s.modules[modId].sessions[sessionNum] || {};
+  const syllabusSessions = getSyllabusForModule(modId, s.modules[modId].weeks);
+  const info = syllabusSessions.find(ss => ss.num === sessionNum);
+  const title = info ? info.title : `Session ${sessionNum}`;
+  const topics = info ? info.topics : '';
+
+  let statusLines = [`Session: ${title}`];
+  if (sess.approved) {
+    statusLines.push(`Status: ✅ Approved by ${sess.approvedBy || 'faculty'}`);
+    if (confirm(statusLines.join('\n') + (topics ? '\n\n' + topics : '') + '\n\n⚠️ Admin override: click OK to UNDO this approval (will re-lock subsequent sessions for the student).')) {
+      undoApprovedSession(modId, sessionNum);
+    }
+  } else if (sess.studentTicked) {
+    statusLines.push('Status: ⏳ Pending faculty approval');
+    alert(statusLines.join('\n') + (topics ? '\n\n' + topics : ''));
   } else {
-    mod.sessionsDone = mod.sessionsDone.filter(n => n !== sessionNum);
+    statusLines.push('Status: Not yet started/ticked by student');
+    alert(statusLines.join('\n') + (topics ? '\n\n' + topics : ''));
   }
+}
+
+async function undoApprovedSession(modId, sessionNum) {
+  const s = allStudents.find(x => x.docId === editingStudentId);
+  if (!s || !s.modules || !s.modules[modId]) return;
+  s.modules[modId].sessions[sessionNum] = {
+    studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false
+  };
   try {
     await updateDoc(doc(db,'cadd_students',editingStudentId), { modules: s.modules });
     renderSyllabusProgress(s.modules);
-    showToast('Progress updated','success');
-  } catch(e) { showToast('Error: '+e.message,'error'); }
+    showToast('Session approval undone — student will need to re-tick and faculty re-approve', 'warning');
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
 }
 
 async function saveModulesOnly() {
-  const modules = getSelectedModules('ed-modulePicker');
   const s = allStudents.find(x => x.docId === editingStudentId);
-  // preserve sessionsDone for modules that remain checked
-  if (s && s.modules) {
-    Object.keys(modules).forEach(modId => {
-      if (s.modules[modId]) modules[modId].sessionsDone = s.modules[modId].sessionsDone || [];
-    });
-  }
+  const modules = getSelectedModules('ed-modulePicker', s ? s.modules : null);
   try {
     await updateDoc(doc(db,'cadd_students',editingStudentId), { modules });
     if (s) s.modules = modules;
@@ -1073,10 +1439,44 @@ async function forceLogoutStudent() {
       autoLogout: false,
       adminForcedLogout: true
     });
+    await autoTickCurrentSessionForStudent(editingStudentId);
     showToast('Student logged out successfully', 'success');
     const s = allStudents.find(x => x.docId === editingStudentId);
     await loadModalAttendance(editingStudentId, s);
   } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+// Mirrors index.html's autoTickCurrentSession() — ensures a forced logout doesn't silently
+// lose the student's in-progress session; ticks it as pending (still needs faculty approval).
+async function autoTickCurrentSessionForStudent(studentDocId) {
+  try {
+    const studentRef = doc(db, 'cadd_students', studentDocId);
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!data.modules) return;
+
+    let changed = false;
+    Object.entries(data.modules).forEach(([modId, mod]) => {
+      const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+      for (let n = 1; n <= totalSessions; n++) {
+        const sess = mod.sessions[n];
+        if (!sess || !sess.approved) {
+          if (sess && !sess.studentTicked) {
+            mod.sessions[n] = { ...sess, studentTicked: true, tickedAt: Timestamp.now(), autoTicked: true };
+            changed = true;
+          }
+          break;
+        }
+      }
+    });
+
+    if (changed) {
+      await updateDoc(studentRef, { modules: data.modules });
+      const s = allStudents.find(x => x.docId === studentDocId);
+      if (s) s.modules = data.modules;
+    }
+  } catch(e) { console.error('Auto-tick error:', e); }
 }
 
 async function saveEditStudent() {
@@ -1161,6 +1561,117 @@ function filterAttendance() {
   renderAttendance(filtered);
 }
 
+// Returns the currently filtered attendance list — used by both export functions
+// so exports always match exactly what's visible on screen.
+function getFilteredAttendanceForExport() {
+  const s=document.getElementById('attSearch').value.toLowerCase();
+  const from=document.getElementById('attDateFrom').value;
+  const to=document.getElementById('attDateTo').value;
+  return allAttendance.filter(r=>{
+    const name=(r.studentName||r.studentId||'').toLowerCase();
+    const d=new Date(r.checkIn.seconds*1000);
+    const ds=d.toISOString().split('T')[0];
+    return (!s||name.includes(s))&&(!from||ds>=from)&&(!to||ds<=to);
+  });
+}
+
+function exportAttendanceExcel() {
+  const records = getFilteredAttendanceForExport();
+  if (!records.length) { showToast('No records to export', 'warning'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Export library not loaded — check your internet connection', 'error'); return; }
+
+  const rows = records.map(r => {
+    const ci = new Date(r.checkIn.seconds * 1000);
+    const co = r.checkOut ? new Date(r.checkOut.seconds * 1000) : null;
+    const hrs = co ? ((r.checkOut.seconds - r.checkIn.seconds) / 3600).toFixed(2) : '';
+    let note = '';
+    if (r.autoLogout) note += 'Auto-logout; ';
+    if (r.orphanedCleanup) note += 'Cleaned up orphaned session; ';
+    if (r.adminForcedLogout) note += 'Admin forced logout; ';
+    return {
+      'Date': ci.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
+      'Student Name': r.studentName || r.studentId || '',
+      'Student ID': r.studentId || '',
+      'Course': r.course || '',
+      'Slot': r.slot || '',
+      'Check In': ci.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }),
+      'Check Out': co ? co.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }) : 'Active',
+      'Hours': hrs,
+      'Notes': note.trim()
+    };
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    {wch:12},{wch:20},{wch:14},{wch:14},{wch:14},{wch:10},{wch:10},{wch:8},{wch:30}
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Attendance Log');
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `CADDesk_CST_Attendance_${dateStr}.xlsx`);
+  showToast(`Exported ${rows.length} records to Excel`, 'success');
+}
+
+function exportAttendancePDF() {
+  const records = getFilteredAttendanceForExport();
+  if (!records.length) { showToast('No records to export', 'warning'); return; }
+
+  const rowsHtml = records.map(r => {
+    const ci = new Date(r.checkIn.seconds * 1000);
+    const co = r.checkOut ? new Date(r.checkOut.seconds * 1000) : null;
+    const hrs = co ? ((r.checkOut.seconds - r.checkIn.seconds) / 3600).toFixed(2) : '—';
+    let note = '';
+    if (r.autoLogout) note += 'Auto-logout ';
+    if (r.adminForcedLogout) note += 'Admin closed ';
+    return `<tr>
+      <td>${ci.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</td>
+      <td>${r.studentName || r.studentId || ''}</td>
+      <td>${r.studentId || ''}</td>
+      <td>${r.course || ''}</td>
+      <td>${ci.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td>${co ? co.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : 'Active'}</td>
+      <td>${hrs}</td>
+      <td>${note}</td>
+    </tr>`;
+  }).join('');
+
+  const from = document.getElementById('attDateFrom').value;
+  const to = document.getElementById('attDateTo').value;
+  const rangeLabel = (from || to) ? `${from || 'Start'} to ${to || 'Today'}` : 'All records';
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>CADDesk CST — Attendance Log</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #1a1a1a; }
+        h1 { font-size: 18px; margin-bottom: 2px; }
+        .sub { font-size: 12px; color: #666; margin-bottom: 18px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+        th { background: #2E3542; color: #fff; }
+        tr:nth-child(even) { background: #f7f7f7; }
+        @media print { body { padding: 0; } }
+      </style>
+    </head>
+    <body>
+      <h1>CADDesk CST — Attendance Log</h1>
+      <div class="sub">${rangeLabel} · Generated ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} · ${records.length} records</div>
+      <table>
+        <thead><tr><th>Date</th><th>Student Name</th><th>Student ID</th><th>Course</th><th>Check In</th><th>Check Out</th><th>Hours</th><th>Notes</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <script>window.onload = () => window.print();<\/script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+  showToast(`Opened print preview for ${records.length} records — choose "Save as PDF" in the print dialog`, 'success');
+}
+
 // ── OVERVIEW ──
 async function loadOverview() {
   const total=allStudents.length;
@@ -1237,6 +1748,7 @@ function showPage(id) {
   const navEl = document.querySelector(`.nav-item[data-page="${id}"]`);
   if (navEl) navEl.classList.add('active');
   if(id==='liveSlots') loadLiveSlots();
+  if(id==='facultyAccounts') loadFacultyAccounts();
 }
 
 function switchTab(tab) {
