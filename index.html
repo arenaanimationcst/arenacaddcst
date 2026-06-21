@@ -229,6 +229,76 @@
 
     /* History */
     .history-card { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:var(--radius); overflow:hidden; }
+
+    /* SYLLABUS SECTION */
+    .syllabus-wrap { margin-bottom:14px; }
+    .syllabus-module-card {
+      background:var(--cadd-card); border:1px solid var(--cadd-border);
+      border-radius:var(--radius); padding:20px; margin-bottom:14px;
+    }
+    .syl-mod-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .syl-mod-name { font-size:15px; font-weight:600; }
+    .syl-mod-progress-text { font-size:11px; color:var(--text-muted); }
+    .syl-bar-track { height:6px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:16px; }
+    .syl-bar-fill { height:100%; background:var(--cadd-orange); border-radius:4px; transition:width 0.3s; }
+
+    .syl-current-session {
+      background:rgba(244,121,32,0.08); border:1px solid rgba(244,121,32,0.25);
+      border-radius:10px; padding:16px;
+    }
+    .syl-session-label { font-size:10px; font-weight:700; color:var(--cadd-orange); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:6px; }
+    .syl-session-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+    .syl-session-topics { font-size:12px; color:var(--text-secondary); line-height:1.6; margin-bottom:14px; }
+    .syl-tick-btn {
+      width:100%; background:linear-gradient(135deg,#4CAF82,#3A9168); color:#fff; border:none;
+      border-radius:9px; padding:12px; font-size:13px; font-weight:600; cursor:pointer;
+      font-family:'Inter',sans-serif; transition:opacity 0.2s;
+    }
+    .syl-tick-btn:hover { opacity:0.9; }
+    .syl-tick-btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .syl-pending-note {
+      background:rgba(240,192,64,0.1); border:1px solid rgba(240,192,64,0.3);
+      border-radius:8px; padding:10px 12px; font-size:12px; color:var(--warning);
+      text-align:center; font-weight:500;
+    }
+    .syl-locked-note {
+      text-align:center; padding:20px; color:var(--text-muted); font-size:12px;
+    }
+    .syl-completed-note {
+      text-align:center; padding:16px; color:var(--success); font-size:13px; font-weight:600;
+    }
+
+    .syl-history-toggle {
+      font-size:11px; color:var(--text-muted); text-align:center; margin-top:12px;
+      cursor:pointer; text-decoration:underline;
+    }
+    .syl-history-list { margin-top:10px; display:none; }
+    .syl-history-list.show { display:block; }
+    .syl-history-item {
+      display:flex; align-items:center; gap:8px; padding:6px 0;
+      font-size:12px; color:var(--text-secondary); border-bottom:1px solid var(--cadd-border);
+    }
+    .syl-history-item:last-child { border-bottom:none; }
+    .syl-history-item .hi-check { color:var(--success); flex-shrink:0; }
+
+    /* CALENDAR LOG */
+    .calendar-log-card { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:var(--radius); overflow:hidden; margin-bottom:14px; }
+    .cal-log-item { padding:12px 20px; border-bottom:1px solid var(--cadd-border); display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .cal-log-item:last-child { border-bottom:none; }
+    .cal-log-date { font-size:12px; font-weight:600; color:var(--text-primary); }
+    .cal-log-session { font-size:11px; color:var(--cadd-orange); margin-top:2px; }
+    .cal-log-hours { font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700; color:var(--success); flex-shrink:0; }
+    .cal-log-running-total { padding:14px 20px; background:rgba(244,121,32,0.06); font-size:12px; color:var(--text-secondary); display:flex; justify-content:space-between; }
+    .cal-log-running-total strong { color:var(--cadd-orange); font-family:'Rajdhani',sans-serif; font-size:15px; }
+
+    .logout-reminder-toast {
+      position:fixed; top:70px; left:50%; transform:translateX(-50%);
+      background:var(--cadd-card); border:1px solid rgba(240,192,64,0.4);
+      border-radius:10px; padding:12px 18px; font-size:12px; color:var(--warning);
+      box-shadow:0 8px 24px rgba(0,0,0,0.4); z-index:998; max-width:90%;
+      opacity:0; transition:opacity 0.3s; pointer-events:none; text-align:center;
+    }
+    .logout-reminder-toast.show { opacity:1; }
     .history-header { padding:14px 20px; border-bottom:1px solid var(--cadd-border); font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.7px; }
     .history-item { padding:13px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--cadd-border); }
     .history-item:last-child { border-bottom:none; }
@@ -365,9 +435,22 @@
       </div>
     </div>
 
+    <div class="syllabus-wrap" id="syllabusWrap" style="display:none">
+      <div id="syllabusModuleList"></div>
+    </div>
+
     <div class="streak-wrap">
       <div class="streak-title">Last 14 Days</div>
       <div class="streak-row" id="streakRow"></div>
+    </div>
+
+    <div class="calendar-log-card" id="calendarLogCard" style="display:none">
+      <div class="history-header">Session Calendar</div>
+      <div id="calendarLogList"></div>
+      <div class="cal-log-running-total">
+        <span>Total hours logged</span>
+        <strong id="calLogRunningTotal">0h</strong>
+      </div>
     </div>
 
     <div class="history-card">
@@ -399,6 +482,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="logout-reminder-toast" id="logoutReminderToast"></div>
 
 <script type="module">
 window.addEventListener('error', (e) => {
@@ -410,7 +494,7 @@ window.addEventListener('unhandledrejection', (e) => {
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, doc, collection, query, where,
+  getFirestore, doc, getDoc, collection, query, where,
   getDocs, addDoc, updateDoc, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -444,6 +528,41 @@ const CENTRE_LNG = TEST_MODE ? HOME_LNG : CST_LNG;
 const RADIUS_M = TEST_MODE ? HOME_RADIUS : CST_RADIUS;
 const AUTO_LOGOUT_HRS = 3;
 
+// Syllabus content — kept in manual sync with admin.html/faculty.html SYLLABUS_CATALOGUE.
+// Only autocad2d_civil has real content so far; other modules fall back to generic session titles.
+const SYLLABUS_CATALOGUE = {
+  autocad2d_civil: {
+    sessions: [
+      { num:1, title:'Introduction & Projections', topics:'Introduction: About CADD centre, AutoCAD History, Engineering Drawings. Projections (First & Third angle), Views (Orthographic, Isometric & Perspective). Exploring GUI, Workspaces. Co-ordinate systems.' },
+      { num:2, title:'Drawing Settings & Display Control', topics:'Drawing settings: Units, Limits, Options, Application status Bar. Display Control: Zoom, Pan, Regen, Clean Screen & Drafting setting.' },
+      { num:3, title:'Object Properties & File Management', topics:'Object Properties: Color, Linetype, Ltscale, Lineweight. File Management: New, Qnew, Open, Save, Save as, Close, Exit, Quit.' },
+      { num:4, title:'Drawing & Modify Tools', topics:'Drawing Tools: Line, Xline, Polyline, Circle, Rectangle, Arc, Ellipse, Polygon, Donut. Modify Tools: Trim, Extend, Erase, Undo, Redo, Join, Explode, Offset, Move, Copy, Rotate, Mirror, Scale, Stretch, Lengthen, Break, Array, Align, Fillet, Chamfer.' },
+      { num:5, title:'Dimensioning', topics:'Dimension Setting: Dimension Style. Dimension: Linear, Aligned, Radius, Diameter, Center Mark, Angle, Arc length, Jogged radius, Ordinate dimensions, Continuous & Baseline dimension, Dimension Space, Dimension Break, Inspection, Tolerance.' },
+      { num:6, title:'Leader & Dimension Editing', topics:'Leader: Leader, Qleader, Mleader, Multi leader style, Add leader, Align Leader lines, Collect Leader. Dimension Editing: Dim edit, dimtedit, Dimension Associative, Reassociate.' },
+      { num:7, title:'Measurements & Annotation', topics:'Measurements: Divide, Measure. Annotation Tools: Text Style, Mtext, Scaletext, Spell.' },
+      { num:8, title:'Advanced Drawing & Modify Tools', topics:'Drawing Tools: Multiline, Pline, Spline, Ray, Wipeout, Revision cloud. Modify Tools: MLstyle, MLedit, Pedit, Splinedit, Grip Editing.' },
+      { num:9, title:'Civil Drawing & Project', topics:'Civil Drawing: Isometric View Drawing, Perspective View Drawing (one point & Two point). Project: Perspective View - Building Exterior (Two point perspective) & Interior (One point perspective).' },
+      { num:10, title:'Hatching & Inquiry Commands', topics:'Hatching utilities: Hatch, Hatchedit, Gradient. Inquiry commands: Id, Dist, List, Radius, Angle, Area, Volume, Fill, Fill mode.' },
+      { num:11, title:'Layer Management', topics:'Layer Management: Adding / Removing Layers, New Property Filter, New Group Filter, Layer States Manager.' },
+      { num:12, title:'Selection Methods & Tables', topics:'Selection Methods: Object Selection Methods, Qselect, Filter. Table: Table, Tablestyle, Tabledit.' },
+      { num:13, title:'Symbol & BOM Creation - Blocks', topics:'Symbol & BOM Creation: Block, Wblock, Insert. Attribute: Attdef, Attedit, Eattedit, Attdisp, Attdia.' },
+      { num:14, title:'Dynamic Blocks & Parametric Modeling', topics:'Symbol & BOM Creation: Dynamic Block. Parametric Modeling: Geometric Constraint, Dimensional Constraint, Design Centre, Tool Palette.' },
+      { num:15, title:'OLE, Copy-Paste & External References', topics:'OLE concepts: Insert object, Olelinks, Olescale. Copy & Paste Concepts: Copy, Copybase, Copylink, Pasteclip, Pastespecial, Pasteblock, Paste original. External references: Xref, Xbind, Refedit.' },
+      { num:16, title:'File Setup & Plot Control', topics:'File Setup: Hyperlink, Etransmit, Publish. Plot control: Introduction to plotting, Page setup, Plot Styles, Layout, Mview, Mspace, Pspace.' }
+    ]
+  }
+};
+
+function getSyllabusSessionInfo(modId, sessionNum) {
+  if (SYLLABUS_CATALOGUE[modId]) {
+    const found = SYLLABUS_CATALOGUE[modId].sessions.find(s => s.num === sessionNum);
+    if (found) return found;
+  }
+  return { num: sessionNum, title: `Session ${sessionNum}`, topics: '' };
+}
+
+let currentStudentDocId = null; // used by syllabus tick handler
+
 let currentStudent = null;
 let activeSession = null;
 let clockInterval = null;
@@ -452,6 +571,8 @@ window.doLogin = doLogin;
 window.doLogout = doLogout;
 window.handleAttendanceAction = handleAttendanceAction;
 window.retryLocation = retryLocation;
+window.tickSessionComplete = tickSessionComplete;
+window.toggleSylHistory = toggleSylHistory;
 
 function showToast(msg, type='') {
   const t = document.getElementById('toast');
@@ -540,6 +661,7 @@ async function doLogin() {
 
 async function loadDashboard() {
   const s = currentStudent;
+  currentStudentDocId = currentStudent.docId;
   document.getElementById('dashName').textContent = s.name;
   document.getElementById('dashInfo').textContent = (s.course||'') + (s.slot ? ' · ' + s.slot : '') + (s.faculty ? ' · ' + s.faculty : '');
   document.getElementById('avatarInitial').textContent = s.name.charAt(0).toUpperCase();
@@ -567,9 +689,128 @@ async function loadDashboard() {
     document.getElementById('notYourDayBanner').style.display='none';
     document.getElementById('actionCard').style.display='block';
   }
+  renderSyllabusSection(s.modules || {});
   await loadStats();
+  await loadCalendarLog();
   await checkActiveSession();
   startClock();
+}
+
+// ── SYLLABUS SECTION ──
+function renderSyllabusSection(modules) {
+  const wrap = document.getElementById('syllabusWrap');
+  const list = document.getElementById('syllabusModuleList');
+  const modIds = Object.keys(modules);
+
+  if (!modIds.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  list.innerHTML = '';
+
+  modIds.forEach(modId => {
+    const mod = modules[modId];
+    const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+    const sessions = mod.sessions || {};
+    const approvedCount = Object.values(sessions).filter(x => x.approved).length;
+    const pct = totalSessions ? Math.round((approvedCount / totalSessions) * 100) : 0;
+
+    // Find current session: first one that is NOT approved
+    let currentNum = null;
+    for (let n = 1; n <= totalSessions; n++) {
+      if (!sessions[n] || !sessions[n].approved) { currentNum = n; break; }
+    }
+
+    const card = document.createElement('div');
+    card.className = 'syllabus-module-card';
+
+    let bodyHtml = '';
+    if (currentNum === null) {
+      // All sessions approved — module complete
+      bodyHtml = `<div class="syl-completed-note">🎉 Module complete! All ${totalSessions} sessions approved.</div>`;
+    } else {
+      const sess = sessions[currentNum] || {};
+      const info = getSyllabusSessionInfo(modId, currentNum);
+      if (sess.approved) {
+        // shouldn't happen given currentNum logic, but safe fallback
+        bodyHtml = `<div class="syl-completed-note">Session ${currentNum} approved.</div>`;
+      } else if (sess.studentTicked) {
+        bodyHtml = `
+          <div class="syl-current-session">
+            <div class="syl-session-label">Session ${currentNum} of ${totalSessions}</div>
+            <div class="syl-session-title">${info.title}</div>
+            ${info.topics ? `<div class="syl-session-topics">${info.topics}</div>` : ''}
+            <div class="syl-pending-note">⏳ Marked complete — waiting for faculty approval</div>
+          </div>
+        `;
+      } else {
+        bodyHtml = `
+          <div class="syl-current-session">
+            <div class="syl-session-label">Session ${currentNum} of ${totalSessions}</div>
+            <div class="syl-session-title">${info.title}</div>
+            ${info.topics ? `<div class="syl-session-topics">${info.topics}</div>` : ''}
+            <button class="syl-tick-btn" onclick="tickSessionComplete('${modId}', ${currentNum})">✅ Mark this session complete</button>
+          </div>
+        `;
+      }
+    }
+
+    // Collapsed history of approved sessions
+    let historyHtml = '';
+    if (approvedCount > 0) {
+      const historyItems = [];
+      for (let n = 1; n <= totalSessions; n++) {
+        if (sessions[n] && sessions[n].approved) {
+          const info = getSyllabusSessionInfo(modId, n);
+          historyItems.push(`<div class="syl-history-item"><span class="hi-check">✅</span> Session ${n}: ${info.title}</div>`);
+        }
+      }
+      historyHtml = `
+        <div class="syl-history-toggle" onclick="toggleSylHistory('${modId}')">View completed sessions (${approvedCount})</div>
+        <div class="syl-history-list" id="sylHistory-${modId}">${historyItems.join('')}</div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="syl-mod-header">
+        <span class="syl-mod-name">${mod.name}</span>
+        <span class="syl-mod-progress-text">${approvedCount}/${totalSessions} sessions</span>
+      </div>
+      <div class="syl-bar-track"><div class="syl-bar-fill" style="width:${pct}%"></div></div>
+      ${bodyHtml}
+      ${historyHtml}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function toggleSylHistory(modId) {
+  const el = document.getElementById('sylHistory-' + modId);
+  if (el) el.classList.toggle('show');
+}
+
+async function tickSessionComplete(modId, sessionNum) {
+  if (!currentStudentDocId) return;
+  try {
+    const studentRef = doc(db, 'cadd_students', currentStudentDocId);
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) { showToast('Could not find your record', 'error'); return; }
+    const data = snap.data();
+    if (!data.modules || !data.modules[modId] || !data.modules[modId].sessions[sessionNum]) {
+      showToast('Session not found', 'error'); return;
+    }
+    data.modules[modId].sessions[sessionNum] = {
+      ...data.modules[modId].sessions[sessionNum],
+      studentTicked: true,
+      tickedAt: Timestamp.now(),
+      autoTicked: false
+    };
+    await updateDoc(studentRef, { modules: data.modules });
+    currentStudent.modules = data.modules;
+    renderSyllabusSection(data.modules);
+    showToast('Marked complete! Waiting for faculty approval.', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
 async function loadStats() {
@@ -618,6 +859,128 @@ async function loadStats() {
   });
 }
 
+// ── CALENDAR LOG: date-wise session + duration + running total ──
+async function loadCalendarLog() {
+  const card = document.getElementById('calendarLogCard');
+  const list = document.getElementById('calendarLogList');
+  const modules = currentStudent.modules || {};
+  const hasModules = Object.keys(modules).length > 0;
+
+  if (!hasModules) { card.style.display = 'none'; return; }
+
+  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','!=',null), orderBy('checkOut','desc'), limit(30));
+  let records = [];
+  try {
+    const snap = await getDocs(q);
+    records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch(e) {
+    // Fallback if the checkOut != null query needs an index not yet created — degrade gracefully
+    console.error('Calendar log query error:', e);
+    card.style.display = 'none';
+    return;
+  }
+
+  if (!records.length) { card.style.display = 'none'; return; }
+
+  // Build a flat list of all ticked sessions (any status) with their timestamps, to match against attendance dates
+  const tickedEvents = [];
+  Object.entries(modules).forEach(([modId, mod]) => {
+    Object.entries(mod.sessions || {}).forEach(([numStr, sess]) => {
+      if (sess.tickedAt) {
+        tickedEvents.push({ modName: mod.name, sessionNum: parseInt(numStr), date: new Date(sess.tickedAt.seconds * 1000).toDateString() });
+      }
+    });
+  });
+
+  card.style.display = 'block';
+  list.innerHTML = '';
+  let runningTotal = 0;
+
+  records.forEach(r => {
+    const ci = new Date(r.checkIn.seconds * 1000);
+    const co = new Date(r.checkOut.seconds * 1000);
+    const hrs = (r.checkOut.seconds - r.checkIn.seconds) / 3600;
+    runningTotal += hrs;
+
+    const dayStr = ci.toDateString();
+    const matchedTick = tickedEvents.find(t => t.date === dayStr);
+    const sessionLabel = matchedTick ? `${matchedTick.modName} · Session ${matchedTick.sessionNum}` : '';
+
+    const div = document.createElement('div');
+    div.className = 'cal-log-item';
+    div.innerHTML = `
+      <div>
+        <div class="cal-log-date">${ci.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</div>
+        ${sessionLabel ? `<div class="cal-log-session">${sessionLabel}</div>` : ''}
+      </div>
+      <div class="cal-log-hours">${hrs.toFixed(1)}h</div>
+    `;
+    list.appendChild(div);
+  });
+
+  document.getElementById('calLogRunningTotal').textContent = runningTotal.toFixed(1) + 'h';
+}
+
+// ── AUTO-TICK ON LOGOUT (auto or manual): guarantees today's session isn't lost ──
+async function autoTickCurrentSession() {
+  if (!currentStudentDocId) return;
+  try {
+    const studentRef = doc(db, 'cadd_students', currentStudentDocId);
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (!data.modules) return;
+
+    let changed = false;
+    Object.entries(data.modules).forEach(([modId, mod]) => {
+      const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+      // Find first un-approved session for this module
+      for (let n = 1; n <= totalSessions; n++) {
+        const sess = mod.sessions[n];
+        if (!sess || !sess.approved) {
+          if (sess && !sess.studentTicked) {
+            mod.sessions[n] = { ...sess, studentTicked: true, tickedAt: Timestamp.now(), autoTicked: true };
+            changed = true;
+          }
+          break; // only touch the first unlocked session per module
+        }
+      }
+    });
+
+    if (changed) {
+      await updateDoc(studentRef, { modules: data.modules });
+      currentStudent.modules = data.modules;
+    }
+  } catch(e) { console.error('Auto-tick error:', e); }
+}
+
+// ── NON-BLOCKING LOGOUT REMINDER (manual checkout only) ──
+function checkAndShowLogoutReminder() {
+  const modules = currentStudent.modules || {};
+  const modIds = Object.keys(modules);
+  if (!modIds.length) return;
+
+  const untickedModules = [];
+  modIds.forEach(modId => {
+    const mod = modules[modId];
+    const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+    for (let n = 1; n <= totalSessions; n++) {
+      const sess = mod.sessions[n];
+      if (!sess || !sess.approved) {
+        if (!sess || !sess.studentTicked) untickedModules.push(mod.name);
+        break;
+      }
+    }
+  });
+
+  if (untickedModules.length) {
+    const reminder = document.getElementById('logoutReminderToast');
+    reminder.textContent = `📝 Don't forget to mark today's session complete for: ${untickedModules.join(', ')}`;
+    reminder.classList.add('show');
+    setTimeout(() => reminder.classList.remove('show'), 6000);
+  }
+}
+
 async function checkActiveSession() {
   try {
     const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','==',null), orderBy('checkIn','desc'));
@@ -641,6 +1004,7 @@ async function checkActiveSession() {
       if (elapsed >= AUTO_LOGOUT_HRS) {
         const autoTime=new Date(activeSession.checkIn.seconds*1000+AUTO_LOGOUT_HRS*36e5);
         await updateDoc(doc(db,'cadd_attendance',mostRecent.id),{checkOut:Timestamp.fromDate(autoTime),autoLogout:true});
+        await autoTickCurrentSession();
         activeSession=null; showToast('Previous session auto-logged out after 3 hours ⚡','warning');
         await loadStats(); return;
       }
@@ -707,6 +1071,7 @@ async function handleAttendanceAction() {
       document.getElementById('sessionBanner').style.display='none';
       btn.className='btn-checkin'; btn.textContent='✅ Mark Attendance';
       document.getElementById('actionLabel').textContent='Tap below to mark your attendance for today';
+      checkAndShowLogoutReminder();
     } else {
       const todayStart=new Date(); todayStart.setHours(0,0,0,0);
       const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',currentStudent.docId),where('checkIn','>=',Timestamp.fromDate(todayStart)));
