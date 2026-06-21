@@ -1128,15 +1128,22 @@ function renderAttendance(list) {
     const ci=new Date(r.checkIn.seconds*1000);
     const co=r.checkOut?new Date(r.checkOut.seconds*1000):null;
     const hrs=co?((r.checkOut.seconds-r.checkIn.seconds)/3600).toFixed(1):'—';
+    let checkOutCell;
+    if (!co) {
+      checkOutCell = '<span style="color:var(--green);font-size:11px">● Active</span>';
+    } else {
+      const timeStr = co.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      checkOutCell = `${timeStr}<br><span style="font-size:10px;color:var(--text3)">✅ Left for the day</span>`;
+    }
     const tr=document.createElement('tr');
     tr.innerHTML=`
       <td>${ci.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'2-digit'})}</td>
       <td>${r.studentName||r.studentId}</td>
       <td>${r.course||'—'}</td>
       <td>${ci.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td>
-      <td>${co?co.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}):'<span style="color:var(--green);font-size:11px">● Active</span>'}</td>
+      <td>${checkOutCell}</td>
       <td style="color:var(--green)">${hrs}</td>
-      <td style="font-size:11px;color:var(--text3)">${r.autoLogout?'⚡ Auto-logout':''}</td>`;
+      <td style="font-size:11px;color:var(--text3)">${r.autoLogout?'⚡ Auto-logout':''}${r.orphanedCleanup?' 🧹 Cleaned up':''}${r.adminForcedLogout?' 👤 Admin closed':''}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -1179,36 +1186,47 @@ async function loadOverview() {
     const ci=new Date(r.checkIn.seconds*1000);
     const isActive=!r.checkOut;
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r.studentName||r.studentId}</td><td>${r.course||'—'}</td><td>${r.slot||'—'}</td><td>${ci.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td><td><span class="badge ${isActive?'active':'deactivated'}">${isActive?'Active':'Done'}</span></td>`;
+    tr.innerHTML=`<td>${r.studentName||r.studentId}</td><td>${r.course||'—'}</td><td>${r.slot||'—'}</td><td>${ci.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</td><td><span class="badge ${isActive?'active':'deactivated'}">${isActive?'🟢 Active':'✅ Left for the day'}</span></td>`;
     tb.appendChild(tr);
   });
 }
 
 // ── LIVE SLOTS ──
 async function loadLiveSlots() {
-  const todayStart=new Date(); todayStart.setHours(0,0,0,0);
-  const q=query(collection(db,'cadd_attendance'),where('checkIn','>=',Timestamp.fromDate(todayStart)),where('checkOut','==',null));
-  const snap=await getDocs(q);
-  const active=snap.docs.map(d=>d.data());
+  const grid=document.getElementById('slotsGrid');
+  grid.innerHTML='<p style="color:var(--text3)">⏳ Loading live slots…</p>';
+  try {
+    const todayStart=new Date(); todayStart.setHours(0,0,0,0);
+    const q=query(collection(db,'cadd_attendance'),where('checkIn','>=',Timestamp.fromDate(todayStart)),where('checkOut','==',null));
+    const snap=await getDocs(q);
+    const active=snap.docs.map(d=>d.data());
 
-  const grid=document.getElementById('slotsGrid'); grid.innerHTML='';
-  const slotMap={};
-  active.forEach(r=>{
-    const s=r.slot||'Unassigned';
-    if(!slotMap[s]) slotMap[s]=0;
-    slotMap[s]++;
-  });
+    grid.innerHTML='';
+    const slotMap={};
+    active.forEach(r=>{
+      const s=r.slot||'Unassigned';
+      if(!slotMap[s]) slotMap[s]=0;
+      slotMap[s]++;
+    });
 
-  const allSlotNames=[...slots];
-  if(active.some(r=>!r.slot)) allSlotNames.push('Unassigned');
+    const allSlotNames=[...slots];
+    if(active.some(r=>!r.slot)) allSlotNames.push('Unassigned');
 
-  if(!allSlotNames.length){grid.innerHTML='<p style="color:var(--text3)">No slots configured yet. Add slots in Settings.</p>';return;}
-  allSlotNames.forEach(s=>{
-    const count=slotMap[s]||0;
-    const div=document.createElement('div'); div.className='slot-card';
-    div.innerHTML=`<div class="sname">${s}</div><div class="scount">${count}</div><div class="slabel">students active now</div>`;
-    grid.appendChild(div);
-  });
+    if(!allSlotNames.length){grid.innerHTML='<p style="color:var(--text3)">No slots configured yet. Add slots in Settings.</p>';return;}
+    allSlotNames.forEach(s=>{
+      const count=slotMap[s]||0;
+      const div=document.createElement('div'); div.className='slot-card';
+      div.innerHTML=`<div class="sname">${s}</div><div class="scount">${count}</div><div class="slabel">students active now</div>`;
+      grid.appendChild(div);
+    });
+  } catch(e) {
+    console.error('Live slots error:', e);
+    if (e.message && e.message.includes('index')) {
+      grid.innerHTML = `<p style="color:var(--red);font-size:13px">⚠️ Firestore needs an index for this view. Check browser console for a link to create it, or contact support.</p>`;
+    } else {
+      grid.innerHTML = `<p style="color:var(--red);font-size:13px">Error loading live slots: ${e.message}</p>`;
+    }
+  }
 }
 
 // ── NAV ──
