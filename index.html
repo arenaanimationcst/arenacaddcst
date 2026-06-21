@@ -402,10 +402,10 @@
 
 <script type="module">
 window.addEventListener('error', (e) => {
-  alert('GLOBAL ERROR CAUGHT: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error('Global error:', e.message, 'at', e.filename + ':' + e.lineno);
 });
 window.addEventListener('unhandledrejection', (e) => {
-  alert('UNHANDLED PROMISE REJECTION: ' + (e.reason?.message || e.reason));
+  console.error('Unhandled promise rejection:', e.reason?.message || e.reason);
 });
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -429,7 +429,7 @@ const db = getFirestore(app);
 // ── LOCATION SETTINGS ──
 // TEST_MODE: true = use your home coordinates for testing right now
 //            false = use real CADDesk CST centre coordinates (switch this Monday at office)
-const TEST_MODE = true;
+const TEST_MODE = false;
 
 const CST_LAT = 18.938080;
 const CST_LNG = 72.834907;
@@ -620,15 +620,28 @@ async function loadStats() {
 
 async function checkActiveSession() {
   try {
-    const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','==',null), orderBy('checkIn','desc'), limit(1));
+    const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','==',null), orderBy('checkIn','desc'));
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const r=snap.docs[0]; activeSession={id:r.id,...r.data()};
+      const allActive = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const mostRecent = allActive[0];
+      const orphaned = allActive.slice(1); // any older "active" records are stale/orphaned
+
+      // Clean up orphaned sessions silently — these are leftover from failed/interrupted check-ins
+      for (const orphan of orphaned) {
+        await updateDoc(doc(db,'cadd_attendance',orphan.id), {
+          checkOut: orphan.checkIn, // zero-duration close, clearly marked
+          autoLogout: true,
+          orphanedCleanup: true
+        });
+      }
+
+      activeSession = { id: mostRecent.id, ...mostRecent };
       const elapsed=(Date.now()-activeSession.checkIn.seconds*1000)/36e5;
       if (elapsed >= AUTO_LOGOUT_HRS) {
         const autoTime=new Date(activeSession.checkIn.seconds*1000+AUTO_LOGOUT_HRS*36e5);
-        await updateDoc(doc(db,'cadd_attendance',r.id),{checkOut:Timestamp.fromDate(autoTime),autoLogout:true});
-        activeSession=null; showToast('Previous session auto-logged out after 8 hours ⚡','warning');
+        await updateDoc(doc(db,'cadd_attendance',mostRecent.id),{checkOut:Timestamp.fromDate(autoTime),autoLogout:true});
+        activeSession=null; showToast('Previous session auto-logged out after 3 hours ⚡','warning');
         await loadStats(); return;
       }
       const ci=new Date(activeSession.checkIn.seconds*1000);
@@ -642,19 +655,16 @@ async function checkActiveSession() {
 }
 
 async function handleAttendanceAction() {
-  alert('CHECKPOINT 1: Function started');
   if (currentStudent.status==='on_leave') { showToast('You are on leave. Contact admin.','error'); return; }
   const allowedDays = currentStudent.attendanceDays || [];
   const todayDay = new Date().getDay();
   if (allowedDays.length > 0 && !allowedDays.includes(todayDay) && !activeSession) {
     showToast("Today isn't your scheduled attendance day.", 'error'); return;
   }
-  alert('CHECKPOINT 2: Passed day check, about to request location');
   const btn=document.getElementById('mainActionBtn');
   btn.disabled=true; btn.textContent=activeSession?'Logging out…':'Verifying location…';
   try {
     const pos=await getLocation();
-    alert('CHECKPOINT 3: Got location! ' + pos.lat + ', ' + pos.lng + ' accuracy: ' + pos.accuracy);
     const dist=haversine(pos.lat,pos.lng,CENTRE_LAT,CENTRE_LNG);
     if (dist>RADIUS_M) {
       document.getElementById('actionCard').style.display='none';
@@ -720,7 +730,7 @@ async function handleAttendanceAction() {
     }
     await loadStats();
   } catch(e) {
-    alert('CHECKPOINT 4: Error caught: ' + (e.message || e.code || JSON.stringify(e)));
+    console.error('Attendance action error:', e);
     if (e.message === 'TIMEOUT_NO_RESPONSE') {
       document.getElementById('actionCard').style.display='none';
       document.getElementById('locationDenied').style.display='block';
