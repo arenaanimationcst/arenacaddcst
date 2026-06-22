@@ -1146,7 +1146,15 @@ document.getElementById('loginId').addEventListener('keydown', e => { if(e.key==
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('service-worker.js')
+        .then(reg => { reg.update(); })
         .catch(err => console.warn('Service worker registration failed:', err));
+
+      let hasReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hasReloaded) return;
+        hasReloaded = true;
+        window.location.reload();
+      });
     });
   }
 
