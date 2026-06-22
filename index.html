@@ -714,6 +714,31 @@ function renderSyllabusSection(modules) {
 
   modIds.forEach(modId => {
     const mod = modules[modId];
+
+    // ── AUTO-MIGRATE old format to new format ──
+    // Old format had: { name, category, weeks, sessionsDone: [1,2,3] }
+    // New format has: { name, category, weeks, totalSessions, facultyAssignments, sessions: {1:{...},2:{...}} }
+    // If sessions map doesn't exist, build it from scratch (or from old sessionsDone array if present)
+    if (!mod.sessions || typeof mod.sessions !== 'object' || Array.isArray(mod.sessions)) {
+      const catalogueData = SYLLABUS_CATALOGUE[modId];
+      const total = mod.totalSessions || (catalogueData ? catalogueData.sessions.length : (mod.weeks || 1) * 2);
+      const oldDone = Array.isArray(mod.sessionsDone) ? mod.sessionsDone : [];
+      mod.sessions = {};
+      for (let n = 1; n <= total; n++) {
+        const wasDone = oldDone.includes(n);
+        mod.sessions[n] = {
+          studentTicked: wasDone,
+          tickedAt: null,
+          approved: false, // old format had no approval — start fresh, faculty needs to approve
+          approvedBy: null,
+          approvedAt: null,
+          autoTicked: false
+        };
+      }
+      mod.totalSessions = total;
+      if (!mod.facultyAssignments) mod.facultyAssignments = [];
+    }
+
     const catalogueTotal = SYLLABUS_CATALOGUE[modId] ? SYLLABUS_CATALOGUE[modId].sessions.length : null;
     const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length || catalogueTotal || (mod.weeks * 2) || 1;
     const sessions = mod.sessions || {};
