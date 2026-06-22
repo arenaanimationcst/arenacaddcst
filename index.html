@@ -662,6 +662,9 @@ async function doLogin() {
 async function loadDashboard() {
   const s = currentStudent;
   currentStudentDocId = currentStudent.docId;
+  // Always reset location error state on fresh dashboard load
+  document.getElementById('locationDenied').style.display='none';
+  document.getElementById('actionCard').style.display='block';
   document.getElementById('dashName').textContent = s.name;
   document.getElementById('dashInfo').textContent = (s.course||'') + (s.slot ? ' · ' + s.slot : '') + (s.faculty ? ' · ' + s.faculty : '');
   document.getElementById('avatarInitial').textContent = s.name.charAt(0).toUpperCase();
@@ -711,7 +714,8 @@ function renderSyllabusSection(modules) {
 
   modIds.forEach(modId => {
     const mod = modules[modId];
-    const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+    const catalogueTotal = SYLLABUS_CATALOGUE[modId] ? SYLLABUS_CATALOGUE[modId].sessions.length : null;
+    const totalSessions = mod.totalSessions || Object.keys(mod.sessions || {}).length || catalogueTotal || (mod.weeks * 2) || 1;
     const sessions = mod.sessions || {};
     const approvedCount = Object.values(sessions).filter(x => x.approved).length;
     const pct = totalSessions ? Math.round((approvedCount / totalSessions) * 100) : 0;
