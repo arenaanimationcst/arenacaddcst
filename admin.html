@@ -195,6 +195,8 @@
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script>emailjs.init('00R665dFCAdBZk8Zq');</script>
 </head>
 <body>
 
@@ -243,7 +245,12 @@
 
     <!-- OVERVIEW -->
     <div class="page active" id="page-dashboard">
-      <div class="page-header"><h1>Overview</h1><span style="font-size:12px;color:var(--text3)" id="overviewDate">—</span></div>
+      <div class="page-header"><h1>Overview</h1>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="checkAndSendAbsenceReminders()">📧 Send Absence Reminders</button>
+          <span style="font-size:12px;color:var(--text3);align-self:center" id="overviewDate">—</span>
+        </div>
+      </div>
       <div class="stat-grid">
         <div class="stat-card"><div class="sv" id="ov-total">—</div><div class="sl">Total Students</div></div>
         <div class="stat-card"><div class="sv green" id="ov-active">—</div><div class="sl">Active</div></div>
@@ -700,6 +707,7 @@ window.saveModulesOnly = saveModulesOnly;
 window.forceLogoutStudent = forceLogoutStudent;
 window.exportAttendanceExcel = exportAttendanceExcel;
 window.exportAttendancePDF = exportAttendancePDF;
+window.checkAndSendAbsenceReminders = checkAndSendAbsenceReminders;
 window.openFacultyModal = openFacultyModal;
 window.generateFacultyId = generateFacultyId;
 window.toggleFacultyPassword = toggleFacultyPassword;
@@ -1088,9 +1096,12 @@ async function saveFaculty() {
     } else {
       // New faculty — must have generated credentials
       const facultyId = document.getElementById('facIdDisplay').dataset.generated;
-      const password = document.getElementById('facPwDisplay').dataset.real;
-      if (!facultyId || !password) { showToast('Could not generate credentials — check name field', 'error'); return; }
-      const data = { name, phone, email, status, facultyId, password, createdAt: Timestamp.now() };
+      const plainPassword = document.getElementById('facPwDisplay').dataset.real;
+      if (!facultyId || !plainPassword) { showToast('Could not generate credentials — check name field', 'error'); return; }
+      const hashedPassword = await hashPassword(plainPassword);
+      // Store both hash (for secure login) and plain (for admin "Show password" display only)
+      // In a future security upgrade, plain can be removed once all faculty have been migrated
+      const data = { name, phone, email, status, facultyId, password: hashedPassword, passwordPlain: plainPassword, createdAt: Timestamp.now() };
       await addDoc(collection(db,'cadd_faculty'), data);
       showToast('Faculty created! ID: ' + facultyId, 'success');
     }
@@ -1379,12 +1390,75 @@ function quickViewCreds(docId) {
   alert(`Student: ${s.name}\nID: ${s.studentId}\nPassword: ${s.password}`);
 }
 
+// ── PASSWORD HASHING (SHA-256 via Web Crypto API — no library needed) ──
+async function hashPassword(plain) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(plain);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ── EMAILJS CONFIG ──
+const EMAILJS_SERVICE = 'service_w659gfy';
+const EMAILJS_WELCOME_TEMPLATE = 'template_aakk1qc';
+const EMAILJS_ABSENCE_TEMPLATE = 'template_8elds0n';
+
 async function sendWelcomeEmail(docId, studentData) {
   const s = studentData || allStudents.find(x=>x.docId===docId);
   if(!s){showToast('Student not found','error');return;}
   if(!s.email){showToast('No email on file for this student','error');return;}
-  showToast('Email sending not yet configured — coming soon','warning');
-  // EmailJS integration will be wired here once template is ready
+  try {
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_WELCOME_TEMPLATE, {
+      to_email: s.email,
+      student_name: s.name,
+      student_id: s.studentId,
+      student_password: s.password,
+      student_course: s.course || '—'
+    });
+    showToast('Welcome email sent to ' + s.email, 'success');
+  } catch(e) {
+    showToast('Email failed: ' + (e.text || e.message || 'Unknown error'), 'error');
+    console.error('EmailJS error:', e);
+  }
+}
+
+async function checkAndSendAbsenceReminders() {
+  showToast('Checking absence reminders…', '');
+  const snap = await getDocs(collection(db,'cadd_students'));
+  const students = snap.docs.map(d=>({docId:d.id,...d.data()})).filter(s=>s.status==='active'||!s.status);
+
+  let sent = 0, skipped = 0;
+  for (const s of students) {
+    if (!s.email) { skipped++; continue; }
+    // Find their most recent attendance record
+    const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',s.docId), orderBy('checkIn','desc'), limit(1));
+    const attSnap = await getDocs(q);
+    let daysSinceLast = 999;
+    if (!attSnap.empty) {
+      const lastCheckIn = new Date(attSnap.docs[0].data().checkIn.seconds * 1000);
+      daysSinceLast = Math.floor((Date.now() - lastCheckIn.getTime()) / 86400000);
+    } else {
+      // No attendance at all — check days since admission
+      if (s.admissionDate) {
+        daysSinceLast = Math.floor((Date.now() - new Date(s.admissionDate.seconds*1000).getTime()) / 86400000);
+      }
+    }
+    if (daysSinceLast >= 3) {
+      try {
+        await emailjs.send(EMAILJS_SERVICE, EMAILJS_ABSENCE_TEMPLATE, {
+          to_email: s.email,
+          student_name: s.name,
+          student_course: s.course || '—',
+          days_absent: daysSinceLast
+        });
+        sent++;
+      } catch(e) {
+        console.error('Absence email failed for', s.name, e);
+      }
+    }
+  }
+  showToast(`Absence reminders: ${sent} sent, ${skipped} skipped (no email)`, sent > 0 ? 'success' : 'warning');
 }
 
 async function loadModalAttendance(docId, s) {
@@ -1733,7 +1807,12 @@ async function loadLiveSlots() {
   } catch(e) {
     console.error('Live slots error:', e);
     if (e.message && e.message.includes('index')) {
-      grid.innerHTML = `<p style="color:var(--red);font-size:13px">⚠️ Firestore needs an index for this view. Check browser console for a link to create it, or contact support.</p>`;
+      const linkMatch = e.message.match(/https:\/\/console\.firebase\.google\.com\S+/);
+      const link = linkMatch ? linkMatch[0] : null;
+      grid.innerHTML = `<div style="color:var(--red);font-size:13px;line-height:1.6">
+        ⚠️ Firestore needs a one-time index for this view.<br>
+        ${link ? `<a href="${link}" target="_blank" style="color:var(--orange);word-break:break-all">Click here to create it</a> — then wait 1-2 min and reload this page.` : 'Check browser console for the index creation link.'}
+      </div>`;
     } else {
       grid.innerHTML = `<p style="color:var(--red);font-size:13px">Error loading live slots: ${e.message}</p>`;
     }
