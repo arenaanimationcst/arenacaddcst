@@ -617,7 +617,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const ADMIN_PW = 'Arena@Faiz786';
+// Admin password stored as pre-computed SHA-256 hash — plain text never in code
+const ADMIN_PW_HASH_COMPUTED = '0be07352fd51a98c1c6b564da8731c35b2829d2df6e779b7186480eba12bd74c';
+async function getAdminHash() {
+  return ADMIN_PW_HASH_COMPUTED;
+}
 let allStudents = [], allAttendance = [], slots = [], facultyList = [];
 let allFaculty = [];
 let editingStudentId = null;
@@ -724,9 +728,11 @@ function showToast(msg, type='') {
 }
 
 // ── GATE ──
-function checkGate() {
+async function checkGate() {
   const pw = document.getElementById('gateInput').value;
-  if (pw === ADMIN_PW) {
+  const enteredHash = await hashPassword(pw);
+  const adminHash = await getAdminHash();
+  if (enteredHash === adminHash) {
     document.getElementById('loginGate').style.display='none';
     document.getElementById('mainUI').style.display='flex';
     document.getElementById('mainLayout').style.display='flex';
