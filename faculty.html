@@ -230,6 +230,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+async function hashPassword(plain) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(plain);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 let currentFaculty = null;
 let myStudents = [];
 let detailStudentId = null;
@@ -261,8 +269,16 @@ async function checkFacultyGate() {
   btn.disabled = true; btn.textContent = 'Logging in…';
 
   try {
-    const q = query(collection(db, 'cadd_faculty'), where('facultyId', '==', id), where('password', '==', pw));
-    const snap = await getDocs(q);
+    // Hash the entered password — new accounts store hashed passwords
+    const hashedPw = await hashPassword(pw);
+
+    // Try hashed password first (new accounts), then fall back to plain text (old accounts)
+    let snap = await getDocs(query(collection(db, 'cadd_faculty'), where('facultyId', '==', id), where('password', '==', hashedPw)));
+    if (snap.empty) {
+      // Fallback: old account with plain text password
+      snap = await getDocs(query(collection(db, 'cadd_faculty'), where('facultyId', '==', id), where('password', '==', pw)));
+    }
+
     if (snap.empty) {
       errBox.textContent = 'Invalid Faculty ID or Password';
       errBox.style.display = 'block';
