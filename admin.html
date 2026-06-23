@@ -756,6 +756,7 @@ async function init() {
   renderModulePicker('ns-modulePicker');
   renderWeekdayPicker('ns-weekdayPicker', ns_selectedDays);
   await loadConfig();
+  await loadFacultyAccounts(); // load faculty before students so dropdowns are ready
   await loadStudents();
   await loadAttendance();
   await loadOverview();
@@ -921,10 +922,14 @@ function populateDropdowns() {
     slots.forEach(s=>sel.innerHTML+=`<option value="${s}">${s}</option>`);
     sel.value=cur;
   });
+  // Faculty dropdown now uses Faculty Accounts (login-capable) not the old text list
+  // Value stored is the faculty docId so it maps correctly to module assignments
   ['ns-faculty','ed-faculty'].forEach(id=>{
     const sel=document.getElementById(id); if(!sel) return;
     const cur=sel.value; sel.innerHTML='<option value="">Select Faculty</option>';
-    facultyList.forEach(f=>sel.innerHTML+=`<option value="${f}">${f}</option>`);
+    allFaculty.filter(f=>f.status!=='deactivated').forEach(f=>{
+      sel.innerHTML+=`<option value="${f.docId}">${f.name}</option>`;
+    });
     sel.value=cur;
   });
 }
