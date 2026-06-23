@@ -581,7 +581,10 @@
           </div>
           <div id="activeSessionBanner" style="display:none; background:rgba(76,175,130,0.08); border:1px solid rgba(76,175,130,0.25); border-radius:10px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
             <span style="font-size:13px; color:var(--green)">🟢 Session currently active</span>
-            <button class="btn btn-red btn-sm" onclick="forceLogoutStudent()">Force Log Out</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-red btn-sm" onclick="forceLogoutStudent()">Force Log Out</button>
+              <button class="btn btn-ghost btn-sm" onclick="deleteActiveSession()" style="border-color:var(--red);color:var(--red)">🗑️ Delete Session</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -709,6 +712,7 @@ window.openSessionDetailFromAdmin = openSessionDetailFromAdmin;
 window.undoApprovedSession = undoApprovedSession;
 window.saveModulesOnly = saveModulesOnly;
 window.forceLogoutStudent = forceLogoutStudent;
+window.deleteActiveSession = deleteActiveSession;
 window.exportAttendanceExcel = exportAttendanceExcel;
 window.exportAttendancePDF = exportAttendancePDF;
 window.checkAndSendAbsenceReminders = checkAndSendAbsenceReminders;
@@ -753,10 +757,11 @@ setInterval(()=>{
 // ── INIT ──
 async function init() {
   document.getElementById('overviewDate').textContent = new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  renderModulePicker('ns-modulePicker');
   renderWeekdayPicker('ns-weekdayPicker', ns_selectedDays);
   await loadConfig();
-  await loadFacultyAccounts(); // load faculty before students so dropdowns are ready
+  await loadFacultyAccounts(); // must load before renderModulePicker so faculty dropdowns are populated
+  renderModulePicker('ns-modulePicker'); // now allFaculty is ready
+  populateDropdowns(); // refresh all dropdowns with faculty data
   await loadStudents();
   await loadAttendance();
   await loadOverview();
@@ -1526,6 +1531,19 @@ async function forceLogoutStudent() {
     });
     await autoTickCurrentSessionForStudent(editingStudentId);
     showToast('Student logged out successfully', 'success');
+    const s = allStudents.find(x => x.docId === editingStudentId);
+    await loadModalAttendance(editingStudentId, s);
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+
+async function deleteActiveSession() {
+  const banner = document.getElementById('activeSessionBanner');
+  const attId = banner.dataset.attendanceId;
+  if (!attId) { showToast('No active session found', 'error'); return; }
+  if (!confirm('Delete this session record entirely? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db,'cadd_attendance',attId));
+    showToast('Session record deleted', 'warning');
     const s = allStudents.find(x => x.docId === editingStudentId);
     await loadModalAttendance(editingStudentId, s);
   } catch(e) { showToast('Error: '+e.message, 'error'); }
