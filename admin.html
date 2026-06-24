@@ -221,6 +221,7 @@
   </div>
   <div class="topbar-right">
     <span id="liveClock2">--:--:--</span>
+    <button onclick="adminLogout()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">Logout</button>
   </div>
 </div>
 
@@ -687,6 +688,7 @@ function getSyllabusForModule(modId, weeks) {
 
 // ── GLOBALS ──
 window.checkGate = checkGate;
+window.adminLogout = adminLogout;
 window.showPage = showPage;
 window.filterStudents = filterStudents;
 window.filterAttendance = filterAttendance;
@@ -732,6 +734,13 @@ function showToast(msg, type='') {
 }
 
 // ── GATE ──
+async function adminLogout() {
+  document.getElementById('loginGate').style.display='flex';
+  document.getElementById('mainUI').style.display='none';
+  document.getElementById('mainLayout').style.display='none';
+  document.getElementById('gateInput').value='';
+}
+
 async function checkGate() {
   const pw = document.getElementById('gateInput').value;
   const enteredHash = await hashPassword(pw);
@@ -1077,7 +1086,8 @@ function openFacultyModal(docId) {
     document.getElementById('facIdDisplay').textContent = f.facultyId || '—';
     document.getElementById('facIdDisplay').dataset.generated = f.facultyId || '';
     document.getElementById('facPwDisplay').textContent = '••••••••';
-    document.getElementById('facPwDisplay').dataset.real = f.password || '';
+    // Show plain password if available, fall back to hash note
+    document.getElementById('facPwDisplay').dataset.real = f.passwordPlain || '(old account — password not stored in plain text)';
     document.getElementById('facTogglePwBtn').textContent = 'Show';
   } else {
     document.getElementById('fac-name').value = '';
@@ -1478,9 +1488,9 @@ async function checkAndSendAbsenceReminders() {
 }
 
 async function loadModalAttendance(docId, s) {
-  const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',docId),orderBy('checkIn','desc'),limit(50));
+  const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',docId),limit(50));
   const snap=await getDocs(q);
-  const records=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const records=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.checkIn.seconds-a.checkIn.seconds);
 
   let totalHrs=0; const presentDays=new Set();
   records.forEach(r=>{
