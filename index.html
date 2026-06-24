@@ -391,6 +391,11 @@
       <p id="notYourDayText">Today isn't one of your scheduled attendance days.</p>
     </div>
 
+    <div class="leave-banner" id="doneForDayBanner" style="display:none;background:rgba(76,175,130,0.08);border-color:rgba(76,175,130,0.25)">
+      <span style="font-size:20px">✅</span>
+      <p style="color:var(--success)">You've completed today's session. <strong>See you next time!</strong></p>
+    </div>
+
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-val green" id="statDays">0</div>
@@ -650,6 +655,8 @@ async function doLogin() {
       showToast('Your account has been deactivated. Contact admin.', 'error');
       btn.disabled=false; btn.textContent='Login →'; return;
     }
+    // Save session so page refresh doesn't log out
+    sessionStorage.setItem('cadd_student_docId', currentStudent.docId);
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('dashboard').style.display='block';
     await loadDashboard();
@@ -659,12 +666,33 @@ async function doLogin() {
   }
 }
 
+// Restore session on page load/refresh
+async function tryRestoreSession() {
+  const savedDocId = sessionStorage.getItem('cadd_student_docId');
+  if (!savedDocId) return;
+  try {
+    const docSnap = await getDoc(doc(db,'cadd_students',savedDocId));
+    if (docSnap.exists()) {
+      currentStudent = { docId: docSnap.id, ...docSnap.data() };
+      if (currentStudent.status === 'deactivated') { sessionStorage.removeItem('cadd_student_docId'); return; }
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      await loadDashboard();
+    } else {
+      sessionStorage.removeItem('cadd_student_docId');
+    }
+  } catch(e) {
+    sessionStorage.removeItem('cadd_student_docId');
+  }
+}
+
 async function loadDashboard() {
   const s = currentStudent;
   currentStudentDocId = currentStudent.docId;
-  // Always reset location error state on fresh dashboard load
+  // Always reset location error state and done-for-day on fresh dashboard load
   document.getElementById('locationDenied').style.display='none';
   document.getElementById('actionCard').style.display='block';
+  document.getElementById('doneForDayBanner').style.display='none';
   document.getElementById('dashName').textContent = s.name;
   document.getElementById('dashInfo').textContent = (s.course||'') + (s.slot ? ' · ' + s.slot : '') + (s.faculty ? ' · ' + s.faculty : '');
   document.getElementById('avatarInitial').textContent = s.name.charAt(0).toUpperCase();
@@ -843,9 +871,12 @@ async function tickSessionComplete(modId, sessionNum) {
 }
 
 async function loadStats() {
-  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), orderBy('checkIn','desc'), limit(60));
+  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId));
   const snap = await getDocs(q);
-  const records = snap.docs.map(d => ({id:d.id,...d.data()}));
+  const records = snap.docs
+    .map(d => ({id:d.id,...d.data()}))
+    .sort((a,b) => b.checkIn.seconds - a.checkIn.seconds)
+    .slice(0, 60);
 
   let totalHrs = 0; const presentDays = new Set();
   records.forEach(r => {
@@ -897,13 +928,17 @@ async function loadCalendarLog() {
 
   if (!hasModules) { card.style.display = 'none'; return; }
 
-  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','!=',null), orderBy('checkOut','desc'), limit(30));
+  // Single equality filter only (no composite index needed) — filter/sort/slice client-side
+  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId));
   let records = [];
   try {
     const snap = await getDocs(q);
-    records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    records = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => r.checkOut != null)
+      .sort((a,b) => b.checkOut.seconds - a.checkOut.seconds)
+      .slice(0, 30);
   } catch(e) {
-    // Fallback if the checkOut != null query needs an index not yet created — degrade gracefully
     console.error('Calendar log query error:', e);
     card.style.display = 'none';
     return;
@@ -1012,10 +1047,14 @@ function checkAndShowLogoutReminder() {
 
 async function checkActiveSession() {
   try {
-    const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId), where('checkOut','==',null), orderBy('checkIn','desc'));
+    const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId));
     const snap = await getDocs(q);
-    if (!snap.empty) {
-      const allActive = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const openDocs = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => r.checkOut == null)
+      .sort((a,b) => b.checkIn.seconds - a.checkIn.seconds);
+    if (openDocs.length) {
+      const allActive = openDocs;
       const mostRecent = allActive[0];
       const orphaned = allActive.slice(1); // any older "active" records are stale/orphaned
 
@@ -1043,7 +1082,21 @@ async function checkActiveSession() {
       const btn=document.getElementById('mainActionBtn');
       btn.className='btn-checkout'; btn.textContent='🔴 Mark Log Out';
       document.getElementById('actionLabel').textContent='Your session is active. Log out when you leave the centre.';
-    } else { activeSession=null; }
+    } else {
+      activeSession=null;
+      // Check if student already completed today's session (done for the day)
+      const todayStart=new Date(); todayStart.setHours(0,0,0,0);
+      const todayQ=query(collection(db,'cadd_attendance'),where('studentDocId','==',currentStudent.docId));
+      const todaySnap=await getDocs(todayQ);
+      const doneToday = todaySnap.docs.some(d=>{
+        const r=d.data();
+        return r.checkIn.seconds*1000 >= todayStart.getTime() && r.checkOut!==null;
+      });
+      if (doneToday) {
+        document.getElementById('actionCard').style.display='none';
+        document.getElementById('doneForDayBanner').style.display='flex';
+      }
+    }
   } catch(e) { console.error(e); }
 }
 
@@ -1098,14 +1151,17 @@ async function handleAttendanceAction() {
       showToast('Logged out successfully! See you next time 👋','success');
       activeSession=null;
       document.getElementById('sessionBanner').style.display='none';
+      document.getElementById('actionCard').style.display='none';
+      document.getElementById('doneForDayBanner').style.display='flex';
       btn.className='btn-checkin'; btn.textContent='✅ Mark Attendance';
       document.getElementById('actionLabel').textContent='Tap below to mark your attendance for today';
       checkAndShowLogoutReminder();
     } else {
       const todayStart=new Date(); todayStart.setHours(0,0,0,0);
-      const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',currentStudent.docId),where('checkIn','>=',Timestamp.fromDate(todayStart)));
+      const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',currentStudent.docId));
       const ex=await getDocs(q);
-      if (!ex.empty && ex.docs.some(d=>d.data().checkOut!==null)) {
+      const todaysDocs = ex.docs.filter(d=>d.data().checkIn.seconds*1000 >= todayStart.getTime());
+      if (todaysDocs.some(d=>d.data().checkOut!==null)) {
         showToast("Today's session already completed!",'warning'); btn.disabled=false; btn.textContent='✅ Mark Attendance'; return;
       }
       const newDoc=await addDoc(collection(db,'cadd_attendance'),{
@@ -1156,7 +1212,8 @@ function retryLocation() {
 }
 
 function doLogout() {
-  currentStudent=null; activeSession=null;
+  currentStudent=null; activeSession=null; currentStudentDocId=null;
+  sessionStorage.removeItem('cadd_student_docId');
   if (clockInterval) clearInterval(clockInterval);
   document.getElementById('dashboard').style.display='none';
   document.getElementById('loginScreen').style.display='block';
@@ -1168,6 +1225,9 @@ function doLogout() {
 
 document.getElementById('loginPw').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 document.getElementById('loginId').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+// Try restoring session on page load (survives refresh, not tab close)
+tryRestoreSession();
 </script>
 
 <!-- PWA: Register Service Worker (separate non-module script, runs independently) -->
