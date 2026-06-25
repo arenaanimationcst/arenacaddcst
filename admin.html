@@ -626,6 +626,7 @@ const ADMIN_PW_HASH_COMPUTED = '0be07352fd51a98c1c6b564da8731c35b2829d2df6e779b7
 async function getAdminHash() {
   return ADMIN_PW_HASH_COMPUTED;
 }
+const AUTO_LOGOUT_HRS = 3; // same rule as the student app — used to auto-close stale sessions whenever admin loads attendance
 let allStudents = [], allAttendance = [], slots = [], facultyList = [];
 let allFaculty = [];
 let editingStudentId = null;
@@ -1440,7 +1441,8 @@ async function sendWelcomeEmail(docId, studentData) {
       student_name: s.name,
       student_id: s.studentId,
       student_password: s.password,
-      student_course: s.course || '—'
+      student_course: s.course || '—',
+      login_url: 'https://arenaanimationcst.github.io/arenacaddcst/'
     });
     showToast('Welcome email sent to ' + s.email, 'success');
   } catch(e) {
@@ -1626,13 +1628,50 @@ async function deleteStudentConfirm() {
   } catch(e){showToast('Error: '+e.message,'error');}
 }
 
+// Auto-closes any attendance session that's been open (checkOut==null) for 3+ hours.
+// The student app only runs this check when that student personally reopens their dashboard —
+// if they never do, the session sits open forever (this is why test1/Faiz Riaz rows stayed
+// "Active" for days). Running it here too means it gets caught whenever admin opens this page.
+async function autoCloseStaleAttendanceSessions() {
+  try {
+    const q = query(collection(db,'cadd_attendance'), where('checkOut','==',null));
+    const snap = await getDocs(q);
+    const now = Date.now();
+    let closedCount = 0;
+    for (const d of snap.docs) {
+      const r = d.data();
+      const elapsedHrs = (now - r.checkIn.seconds*1000) / 36e5;
+      if (elapsedHrs >= AUTO_LOGOUT_HRS) {
+        const autoTime = new Date(r.checkIn.seconds*1000 + AUTO_LOGOUT_HRS*36e5);
+        await updateDoc(doc(db,'cadd_attendance',d.id), { checkOut: Timestamp.fromDate(autoTime), autoLogout: true });
+        closedCount++;
+      }
+    }
+    if (closedCount > 0) showToast(`Auto-closed ${closedCount} stale session(s) past 3 hours ⚡`, 'warning');
+  } catch(e) { console.error('Auto-close stale sessions error:', e); }
+}
+
 // ── ATTENDANCE LOG ──
 async function loadAttendance() {
+  await autoCloseStaleAttendanceSessions();
   const q=query(collection(db,'cadd_attendance'),orderBy('checkIn','desc'),limit(200));
   const snap=await getDocs(q);
   allAttendance=snap.docs.map(d=>({id:d.id,...d.data()}));
   renderAttendance(allAttendance);
 }
+
+// One-click force logout straight from the Attendance Log table, no need to open the student modal
+async function forceLogoutAttendanceRow(id) {
+  if (!confirm('Force log out this session right now?')) return;
+  try {
+    await updateDoc(doc(db,'cadd_attendance',id), { checkOut: Timestamp.now(), autoLogout: false, adminForcedLogout: true });
+    const i = allAttendance.findIndex(r => r.id === id);
+    if (i !== -1) { allAttendance[i].checkOut = Timestamp.now(); allAttendance[i].adminForcedLogout = true; }
+    showToast('Session force-logged out', 'success');
+    filterAttendance();
+  } catch(e) { showToast('Error: '+e.message, 'error'); }
+}
+window.forceLogoutAttendanceRow = forceLogoutAttendanceRow;
 
 function renderAttendance(list) {
   const tb=document.getElementById('attTable'); tb.innerHTML='';
@@ -1643,7 +1682,7 @@ function renderAttendance(list) {
     const hrs=co?((r.checkOut.seconds-r.checkIn.seconds)/3600).toFixed(1):'—';
     let checkOutCell;
     if (!co) {
-      checkOutCell = '<span style="color:var(--green);font-size:11px">● Active</span>';
+      checkOutCell = `<span style="color:var(--green);font-size:11px">● Active</span> <button class="btn btn-red btn-sm" style="padding:2px 8px;font-size:10px;margin-left:6px" onclick="forceLogoutAttendanceRow('${r.id}')">Force Logout</button>`;
     } else {
       const timeStr = co.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
       checkOutCell = `${timeStr}<br><span style="font-size:10px;color:var(--text3)">✅ Left for the day</span>`;
