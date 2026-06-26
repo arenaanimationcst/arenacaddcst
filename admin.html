@@ -404,9 +404,23 @@
       </div>
       <div class="search-row">
         <input type="text" id="attSearch" placeholder="Search by student name or ID…" oninput="filterAttendance()"/>
-        <input type="date" id="attDateFrom"/>
-        <input type="date" id="attDateTo"/>
+        <input type="date" id="attDateFrom" onchange="filterAttendance()"/>
+        <input type="date" id="attDateTo" onchange="filterAttendance()"/>
+        <select id="attCourseFilter" onchange="filterAttendance()">
+          <option value="">All Courses</option>
+          <option>Interiors</option><option>Mechanical</option><option>Civil</option>
+          <option>Architecture</option><option>Basic CAD</option><option>VFX</option>
+          <option>Animation</option><option>Gaming</option><option>Graphics</option>
+          <option>3D Visualisation</option><option>Others</option>
+        </select>
+        <select id="attFacultyFilter" onchange="filterAttendance()">
+          <option value="">All Faculty</option>
+        </select>
+        <select id="attSlotFilter" onchange="filterAttendance()">
+          <option value="">All Slots</option>
+        </select>
         <button class="btn btn-orange" onclick="filterAttendance()">Filter</button>
+        <button class="btn btn-ghost" onclick="clearAttendanceFilters()">Clear</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -881,7 +895,7 @@ function getSelectedModules(containerId, existingModules) {
       const sessions = existing && existing.sessions ? { ...existing.sessions } : {};
       for (let n = 1; n <= totalSessions; n++) {
         if (!sessions[n]) {
-          sessions[n] = { studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false };
+          sessions[n] = { studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false, practiceCount: 0, lastPracticedAt: null };
         }
       }
 
@@ -944,6 +958,7 @@ function renderConfig() {
 
 function populateDropdowns() {
   populateStudentFilterOptions();
+  populateAttendanceFilterOptions();
   ['ns-slot','ed-slot'].forEach(id=>{
     const sel=document.getElementById(id); if(!sel) return;
     const cur=sel.value; sel.innerHTML='<option value="">Select Slot</option>';
@@ -1147,6 +1162,7 @@ async function saveFaculty() {
     }
     closeModal('facultyModal');
     await loadFacultyAccounts();
+    populateDropdowns();
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
@@ -1156,6 +1172,7 @@ async function deleteFacultyConfirm() {
   try {
     await deleteDoc(doc(db,'cadd_faculty',editingFacultyId));
     allFaculty = allFaculty.filter(x => x.docId !== editingFacultyId);
+    populateDropdowns();
     showToast('Faculty deleted', 'warning');
     closeModal('facultyModal');
     filterFacultyTable();
@@ -1175,7 +1192,7 @@ function renderStudents(list) {
       <td><code style="color:var(--orange);font-size:12px">${s.studentId||'—'}</code></td>
       <td>${s.name||'—'}</td>
       <td>${s.course||'—'}</td>
-      <td style="font-size:12px;color:var(--text2)">${s.faculty||'—'}</td>
+      <td style="font-size:12px;color:var(--text2)">${(allFaculty.find(f=>f.docId===s.faculty)||{}).name || '—'}</td>
       <td>${s.phone||'—'}</td>
       <td>${s.slot||'—'}</td>
       <td style="font-size:11px;color:var(--text2);letter-spacing:1px">${daysStr}</td>
@@ -1195,13 +1212,14 @@ function renderStudents(list) {
 }
 
 // Populates the Faculty / Slot / Module filter dropdowns on the students page.
-// Faculty + Slot lists come from cadd_config (loaded in loadConfig); Module list is the static MODULE_CATALOGUE.
+// Faculty filter uses allFaculty (real Faculty Accounts, login-capable) since that's
+// what s.faculty actually stores (a facultyId/docId) — the old facultyList is unused.
 function populateStudentFilterOptions() {
   const facSel = document.getElementById('filterFaculty');
   if (facSel) {
     const current = facSel.value;
     facSel.innerHTML = '<option value="">All Faculty</option>' +
-      facultyList.map(f => `<option value="${f}">${f}</option>`).join('');
+      allFaculty.map(f => `<option value="${f.docId}">${f.name}</option>`).join('');
     facSel.value = current;
   }
   const slotSel = document.getElementById('filterSlot');
@@ -1382,6 +1400,19 @@ function renderSyllabusProgress(modules) {
     return;
   }
   wrap.innerHTML = '';
+
+  // Aggregate stats across all modules — total sessions approved vs total practice logged
+  let totalApprovedAll = 0, totalPracticeAll = 0;
+  modIds.forEach(modId => {
+    const sessions = modules[modId].sessions || {};
+    totalApprovedAll += Object.values(sessions).filter(s => s.approved).length;
+    totalPracticeAll += Object.values(sessions).reduce((sum,s) => sum + (s.practiceCount||0), 0);
+  });
+  const statsBar = document.createElement('div');
+  statsBar.style = 'display:flex;gap:16px;margin-bottom:14px;font-size:12px;color:var(--text2)';
+  statsBar.innerHTML = `<span>✅ <strong style="color:var(--green)">${totalApprovedAll}</strong> sessions completed</span><span>📝 <strong style="color:var(--orange)">${totalPracticeAll}</strong> practice sessions logged</span>`;
+  wrap.appendChild(statsBar);
+
   modIds.forEach(modId => {
     const mod = modules[modId];
     const syllabusSessions = getSyllabusForModule(modId, mod.weeks);
@@ -1389,6 +1420,7 @@ function renderSyllabusProgress(modules) {
     const sessions = mod.sessions || {};
     const approvedCount = Object.values(sessions).filter(s => s.approved).length;
     const pendingCount = Object.values(sessions).filter(s => s.studentTicked && !s.approved).length;
+    const practiceCount = Object.values(sessions).reduce((sum,s) => sum + (s.practiceCount||0), 0);
     const pct = Math.min(100, Math.round((approvedCount / totalSessions) * 100));
 
     const facultyInfo = (mod.facultyAssignments && mod.facultyAssignments.length)
@@ -1404,6 +1436,7 @@ function renderSyllabusProgress(modules) {
       let stateLabel = `S${i}`;
       if (sess.approved) { stateClass = 'done'; stateLabel = `✅ S${i}`; }
       else if (sess.studentTicked) { stateClass = 'pending'; stateLabel = `⏳ S${i}`; }
+      else if (sess.practiceCount) { stateClass = 'pending'; stateLabel = `📝 S${i}`; }
       const syllabusInfo = syllabusSessions.find(ss => ss.num === i);
       const title = syllabusInfo ? syllabusInfo.title : `Session ${i}`;
       sessionsHtml += `<label class="mp-session ${stateClass}" title="${title}" onclick="event.preventDefault(); openSessionDetailFromAdmin('${modId}', ${i})">
@@ -1413,7 +1446,7 @@ function renderSyllabusProgress(modules) {
     card.innerHTML = `
       <div class="mp-header">
         <span class="mp-name">${mod.name}</span>
-        <span class="mp-meta">${approvedCount}/${totalSessions} approved${pendingCount ? ` · ${pendingCount} pending` : ''} · ${mod.weeks} wks</span>
+        <span class="mp-meta">${approvedCount}/${totalSessions} approved${pendingCount ? ` · ${pendingCount} pending` : ''}${practiceCount ? ` · 📝 ${practiceCount} practice` : ''} · ${mod.weeks} wks</span>
       </div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:8px">👨‍🏫 ${facultyInfo}</div>
       <div class="mp-bar-track"><div class="mp-bar-fill" style="width:${pct}%"></div></div>
@@ -1431,19 +1464,20 @@ function openSessionDetailFromAdmin(modId, sessionNum) {
   const info = syllabusSessions.find(ss => ss.num === sessionNum);
   const title = info ? info.title : `Session ${sessionNum}`;
   const topics = info ? info.topics : '';
+  const practiceNote = sess.practiceCount ? `\nPracticed: ${sess.practiceCount} time(s)` : '';
 
   let statusLines = [`Session: ${title}`];
   if (sess.approved) {
     statusLines.push(`Status: ✅ Approved by ${sess.approvedBy || 'faculty'}`);
-    if (confirm(statusLines.join('\n') + (topics ? '\n\n' + topics : '') + '\n\n⚠️ Admin override: click OK to UNDO this approval (will re-lock subsequent sessions for the student).')) {
+    if (confirm(statusLines.join('\n') + practiceNote + (topics ? '\n\n' + topics : '') + '\n\n⚠️ Admin override: click OK to UNDO this approval (will re-lock subsequent sessions for the student).')) {
       undoApprovedSession(modId, sessionNum);
     }
   } else if (sess.studentTicked) {
     statusLines.push('Status: ⏳ Pending faculty approval');
-    alert(statusLines.join('\n') + (topics ? '\n\n' + topics : ''));
+    alert(statusLines.join('\n') + practiceNote + (topics ? '\n\n' + topics : ''));
   } else {
     statusLines.push('Status: Not yet started/ticked by student');
-    alert(statusLines.join('\n') + (topics ? '\n\n' + topics : ''));
+    alert(statusLines.join('\n') + practiceNote + (topics ? '\n\n' + topics : ''));
   }
 }
 
@@ -1451,6 +1485,7 @@ async function undoApprovedSession(modId, sessionNum) {
   const s = allStudents.find(x => x.docId === editingStudentId);
   if (!s || !s.modules || !s.modules[modId]) return;
   s.modules[modId].sessions[sessionNum] = {
+    ...s.modules[modId].sessions[sessionNum],
     studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false
   };
   try {
@@ -1774,15 +1809,54 @@ function renderAttendance(list) {
   });
 }
 
+// Populates Faculty + Slot filter dropdowns on the Attendance Log page (separate from the
+// Students page filters — attendance records store faculty/slot directly on each record).
+function populateAttendanceFilterOptions() {
+  const facSel = document.getElementById('attFacultyFilter');
+  if (facSel) {
+    const current = facSel.value;
+    facSel.innerHTML = '<option value="">All Faculty</option>' +
+      allFaculty.map(f => `<option value="${f.docId}">${f.name}</option>`).join('');
+    facSel.value = current;
+  }
+  const slotSel = document.getElementById('attSlotFilter');
+  if (slotSel) {
+    const current = slotSel.value;
+    slotSel.innerHTML = '<option value="">All Slots</option>' +
+      slots.map(s => `<option value="${s}">${s}</option>`).join('');
+    slotSel.value = current;
+  }
+}
+
+function clearAttendanceFilters() {
+  document.getElementById('attSearch').value = '';
+  document.getElementById('attDateFrom').value = '';
+  document.getElementById('attDateTo').value = '';
+  document.getElementById('attCourseFilter').value = '';
+  document.getElementById('attFacultyFilter').value = '';
+  document.getElementById('attSlotFilter').value = '';
+  filterAttendance();
+}
+window.clearAttendanceFilters = clearAttendanceFilters;
+
 function filterAttendance() {
   const s=document.getElementById('attSearch').value.toLowerCase();
   const from=document.getElementById('attDateFrom').value;
   const to=document.getElementById('attDateTo').value;
+  const course=document.getElementById('attCourseFilter').value;
+  const fac=document.getElementById('attFacultyFilter').value;
+  const slotVal=document.getElementById('attSlotFilter').value;
   const filtered=allAttendance.filter(r=>{
     const name=(r.studentName||r.studentId||'').toLowerCase();
     const d=new Date(r.checkIn.seconds*1000);
     const ds=d.toISOString().split('T')[0];
-    return (!s||name.includes(s))&&(!from||ds>=from)&&(!to||ds<=to);
+    if (s && !name.includes(s)) return false;
+    if (from && ds<from) return false;
+    if (to && ds>to) return false;
+    if (course && r.course!==course) return false;
+    if (fac && r.faculty!==fac) return false;
+    if (slotVal && r.slot!==slotVal) return false;
+    return true;
   });
   renderAttendance(filtered);
 }
@@ -1793,11 +1867,20 @@ function getFilteredAttendanceForExport() {
   const s=document.getElementById('attSearch').value.toLowerCase();
   const from=document.getElementById('attDateFrom').value;
   const to=document.getElementById('attDateTo').value;
+  const course=document.getElementById('attCourseFilter').value;
+  const fac=document.getElementById('attFacultyFilter').value;
+  const slotVal=document.getElementById('attSlotFilter').value;
   return allAttendance.filter(r=>{
     const name=(r.studentName||r.studentId||'').toLowerCase();
     const d=new Date(r.checkIn.seconds*1000);
     const ds=d.toISOString().split('T')[0];
-    return (!s||name.includes(s))&&(!from||ds>=from)&&(!to||ds<=to);
+    if (s && !name.includes(s)) return false;
+    if (from && ds<from) return false;
+    if (to && ds>to) return false;
+    if (course && r.course!==course) return false;
+    if (fac && r.faculty!==fac) return false;
+    if (slotVal && r.slot!==slotVal) return false;
+    return true;
   });
 }
 
