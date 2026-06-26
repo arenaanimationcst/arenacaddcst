@@ -155,6 +155,20 @@
     .stat-val.red { color:var(--danger); }
     .stat-label { font-size:11px; color:var(--text-muted); margin-top:2px; }
 
+    /* Syllabus practice/session stats */
+    .syl-stats-row { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:16px; }
+    .syl-stat { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:10px; padding:14px; text-align:center; }
+    .syl-stat-val { font-family:'Rajdhani',sans-serif; font-size:24px; font-weight:700; }
+    .syl-stat-val.green { color:var(--success); }
+    .syl-stat-val.orange { color:var(--cadd-orange); }
+    .syl-stat-label { font-size:10px; color:var(--text-muted); margin-top:2px; text-transform:uppercase; letter-spacing:0.5px; }
+    .syl-practice-btn {
+      width:100%; margin-top:8px; padding:10px; border-radius:8px;
+      background:rgba(244,121,32,0.1); border:1px solid rgba(244,121,32,0.35);
+      color:var(--cadd-orange); font-size:13px; font-weight:600; cursor:pointer;
+    }
+    .syl-practice-count { font-size:11px; color:var(--text-muted); margin-top:6px; text-align:center; }
+
     /* Session banner */
     .session-active {
       background:rgba(76,175,130,0.08); border:1px solid rgba(76,175,130,0.2);
@@ -441,6 +455,16 @@
     </div>
 
     <div class="syllabus-wrap" id="syllabusWrap" style="display:none">
+      <div class="syl-stats-row">
+        <div class="syl-stat">
+          <div class="syl-stat-val green" id="statSessionsApproved">0</div>
+          <div class="syl-stat-label">Sessions Completed</div>
+        </div>
+        <div class="syl-stat">
+          <div class="syl-stat-val orange" id="statPractice">0</div>
+          <div class="syl-stat-label">Practice Sessions</div>
+        </div>
+      </div>
       <div id="syllabusModuleList"></div>
     </div>
 
@@ -740,6 +764,18 @@ function renderSyllabusSection(modules) {
   wrap.style.display = 'block';
   list.innerHTML = '';
 
+  // Aggregate stats across all modules — updates the two stat cards at the top
+  let totalApprovedAll = 0, totalPracticeAll = 0;
+  modIds.forEach(modId => {
+    const sessions = modules[modId].sessions || {};
+    totalApprovedAll += Object.values(sessions).filter(x => x.approved).length;
+    totalPracticeAll += Object.values(sessions).reduce((sum,x) => sum + (x.practiceCount||0), 0);
+  });
+  const statApprovedEl = document.getElementById('statSessionsApproved');
+  const statPracticeEl = document.getElementById('statPractice');
+  if (statApprovedEl) statApprovedEl.textContent = totalApprovedAll;
+  if (statPracticeEl) statPracticeEl.textContent = totalPracticeAll;
+
   modIds.forEach(modId => {
     const mod = modules[modId];
 
@@ -760,7 +796,9 @@ function renderSyllabusSection(modules) {
           approved: false, // old format had no approval — start fresh, faculty needs to approve
           approvedBy: null,
           approvedAt: null,
-          autoTicked: false
+          autoTicked: false,
+          practiceCount: 0,
+          lastPracticedAt: null
         };
       }
       mod.totalSessions = total;
@@ -808,6 +846,8 @@ function renderSyllabusSection(modules) {
             <div class="syl-session-title">${info.title}</div>
             ${info.topics ? `<div class="syl-session-topics">${info.topics}</div>` : ''}
             <button class="syl-tick-btn" onclick="tickSessionComplete('${modId}', ${currentNum})">✅ Mark this session complete</button>
+            <button class="syl-practice-btn" onclick="logPracticeSession('${modId}', ${currentNum})">📝 I practiced this (not a full session)</button>
+            ${sess.practiceCount ? `<div class="syl-practice-count">Practiced ${sess.practiceCount}x so far${sess.lastPracticedAt ? ' · last on ' + new Date(sess.lastPracticedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : ''}</div>` : ''}
           </div>
         `;
       }
@@ -869,6 +909,33 @@ async function tickSessionComplete(modId, sessionNum) {
     showToast('Marked complete! Waiting for faculty approval.', 'success');
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
+
+// Logs a practice attempt for the current (not-yet-completed) session — doesn't touch
+// studentTicked/approved, so it doesn't advance the syllabus. Purely for tracking how much
+// a student is practicing vs how many actual faculty-led sessions they've completed.
+async function logPracticeSession(modId, sessionNum) {
+  if (!currentStudentDocId) return;
+  try {
+    const studentRef = doc(db, 'cadd_students', currentStudentDocId);
+    const snap = await getDoc(studentRef);
+    if (!snap.exists()) { showToast('Could not find your record', 'error'); return; }
+    const data = snap.data();
+    if (!data.modules || !data.modules[modId] || !data.modules[modId].sessions[sessionNum]) {
+      showToast('Session not found', 'error'); return;
+    }
+    const sess = data.modules[modId].sessions[sessionNum];
+    data.modules[modId].sessions[sessionNum] = {
+      ...sess,
+      practiceCount: (sess.practiceCount || 0) + 1,
+      lastPracticedAt: Timestamp.now()
+    };
+    await updateDoc(studentRef, { modules: data.modules });
+    currentStudent.modules = data.modules;
+    renderSyllabusSection(data.modules);
+    showToast('Practice logged! Keep it up 💪', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.logPracticeSession = logPracticeSession;
 
 async function loadStats() {
   const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId));
