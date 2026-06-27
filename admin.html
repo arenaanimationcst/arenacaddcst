@@ -579,7 +579,7 @@
           </div>
           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
             <button class="btn btn-orange" onclick="saveEditStudent()">Save Changes</button>
-            <button class="btn btn-ghost" onclick="sendWelcomeEmail(editingStudentId)">📧 Resend Welcome Email</button>
+            <button class="btn btn-ghost" onclick="resendWelcomeEmailForCurrentStudent()">📧 Resend Welcome Email</button>
             <button class="btn btn-red" onclick="deleteStudentConfirm()">Delete Student</button>
           </div>
         </div>
@@ -1559,6 +1559,14 @@ async function sendWelcomeEmail(docId, studentData) {
     console.error('EmailJS error:', e);
   }
 }
+// Thin wrapper for the modal's "Resend Welcome Email" button — needed because that button's
+// onclick is inline HTML, which runs in global scope and can't see editingStudentId (a
+// module-scoped variable). This function lives inside the module so it CAN see it correctly.
+function resendWelcomeEmailForCurrentStudent() {
+  if (!editingStudentId) { showToast('No student selected', 'error'); return; }
+  sendWelcomeEmail(editingStudentId);
+}
+window.resendWelcomeEmailForCurrentStudent = resendWelcomeEmailForCurrentStudent;
 
 async function checkAndSendAbsenceReminders() {
   showToast('Checking absence reminders…', '');
