@@ -557,6 +557,7 @@
             </div>
             <div class="f-group"><label>Faculty</label><select id="ed-faculty"></select></div>
             <div class="f-group"><label>Slot</label><select id="ed-slot"></select></div>
+            <div class="f-group"><label>Joining / Admission Date</label><input type="date" id="ed-admDate"/></div>
             <div class="f-group"><label>Status</label>
               <select id="ed-status">
                 <option value="active">Active</option>
@@ -823,6 +824,41 @@ const SYLLABUS_CATALOGUE = {
       { num:18, title:'Photo Manipulation', topics:'Photo manipulation – Background adding & removal.' },
       { num:19, title:'AutoCAD Plan Texturing & Rendering', topics:'AutoCAD Plan Texturing & Rendering.' },
       { num:20, title:'Mini Project', topics:'Mini Project.' }
+    ]
+  },
+  revit_a: {
+    totalSessions: 30,
+    sessions: [
+      { num:1, title:'Introduction to Revit Architecture & BIM', topics:'Introduction, About BIM, Introduction to Autodesk Revit Architecture, Revit File Types, Exploring User Interface, Building Elements, Starting a New Project.' },
+      { num:2, title:'Drawing Plan, Levels, Grids & Walls', topics:'Drawing Plan as per Dimension, Drawing Aids, Project Units. Levels: Adding Levels, Modifying Levels, Creating Level Head, Constrain Levels. Grids. Walls: Create New Wall type, Location Line, Wall joins, Compound Wall. Practice: Let them prepare basic plan using above tools.' },
+      { num:3, title:'Advanced Wall Modeling', topics:'More in Depth – Wall, Modify walls, Wall layer wrapping, Stacked wall, Vertically compound Wall, Wall shapes and Openings, Wall sweeps and Reveals, Construction Modeling Tools, Parts, Assemblies. Practice: Hands on.' },
+      { num:4, title:'Modify Tools & Openings I', topics:'Modify Tools, Move, Copy, Create Similar, Rotate, Mirror, Array, Scale, Split Element, Trim, Align, Offset, Pin, Unpin, Doors, Windows, Keyboard Shortcuts. Practice: Hands on.' },
+      { num:5, title:'Modify Tools & Openings II', topics:'Modify Tools, Move, Copy, Create Similar, Rotate, Mirror, Array, Scale, Split Element, Trim, Align, Offset, Pin, Unpin, Doors, Windows, Keyboard Shortcuts. Practice: Hands on.' },
+      { num:6, title:'3D Modeling - Floors & Ceilings', topics:'3D Modeling: Floor, Adding Floor, Sloped Floor, Floor Slab Edge, Ceiling, Create Ceiling, Components, Working with Modern Medium Library. Practice: Hands on.' },
+      { num:7, title:'3D Modeling - Roof & Openings', topics:'3D Modeling: Roof, Creating Roof, Modifying Roof, Shape editing for Roofs and Floors, Roof Soffit, Roof Fascia, Roof Gutter, Openings, Opening on face and Vertical Opening, Shaft opening, Dormer Opening. Practice: Hands on.' },
+      { num:8, title:'Documentation - Dimensions & Constraints', topics:'Documentation: Dimensions, Temporary Dimensions, Permanent Dimensions, Modifying Dimensions, Constraints. Practice: Hands on.' },
+      { num:9, title:'Managing Views', topics:'Managing Views: Creating views, Plan views, View range, Plan region, Elevation, Section, 3D Views, Lock 3D view, Background, Cropping View, Visibility or Graphics, View Templates, Duplicate Views, Visual Styles, Filter, Graphic Display Options. Practice: Hands on.' },
+      { num:10, title:'Curtain Wall', topics:'Curtain Wall, Adding Curtain Grids, Mullions, Reshaping Curtain Wall Panels, Adding Curtain Door to panel, Embedded Walls.' },
+      { num:11, title:'Stair & Railing', topics:'Stair by component, Creating stair by sketching, Customizing stair documentation, Stair calculator, Modify railing, Ramp, Railings, Add railings, Add railings by sketching, Modify railing continuous rail. Practice: Hands on.' },
+      { num:12, title:'Conceptual Massing & Energy Analysis I', topics:'Conceptual Modeling: Massing, In place Mass, Forms, Modify Forms, Rationalizing Surface, Splitting Faces, Paint Tool, Placing Mass Instances from Mass Family, Face based Modeling, Conceptual Energy Analysis, Choosing location, Energy settings, Enable energy model, Run energy simulation, Results and compare. Practice: Hands on.' },
+      { num:13, title:'Conceptual Massing & Energy Analysis II', topics:'Customizing form rationalization, Display styles for analysis add in application, Controlling visibility of mass instances. Practice: Hands on.' },
+      { num:14, title:'Documentation - Text, Tags & Keynotes', topics:'Documentation: Text, Adding text notes, Modify text notes, Model text, Tag, Tag tools, Applying tag by category, Tag all not tagged, Material Tag, Keynote, Types of Keynote, Placing Keynote, Keynoting Settings, Custom Keynotes, Adding Keynote in 3D view. Practice: Hands on.' },
+      { num:15, title:'Callout & Drafting Views', topics:'Callout Views, Types of Callouts, Detailing, Drafting Views: Creating drafting views, Importing views from CAD program, Reusing drafting view, Inserting detail component, Repeating detail. Practice: Hands on.' },
+      { num:16, title:'Schedules', topics:'Schedules: Creating Schedules/quantities, Schedule properties, Custom parameters, Modify schedules, Material take off schedules, Annotation schedules or note blocks, Creating annotation schedule, Reusing schedule views. Practice: Hands on.' },
+      { num:17, title:'Rooms & Area Plans', topics:'Rooms: Creating rooms, Room boundaries, Room volume, Situations that can effect Room volume computations, Room tag. Schedule Keys, Area: Area schemes, Area types, Area plans, tags, Color Scheme, Legend. Practice: Hands on.' },
+      { num:18, title:'Sheets & Title Blocks', topics:'Sheets, Title Blocks: Creating title blocks, Revision workflow, Revision schedules on title block, Modifying views on sheet, Rotating views on sheet, Dividing view across multiple sheets, Sheet List, Print. Practice: Hands on.' },
+      { num:19, title:'Lighting, Materials, Rendering & Solar Study', topics:'Lights: Lighting fixtures, Defining geometry of light source, Controlling the brightness of light source, Light groups. Materials: Creating material library, About the material properties and assets, Editing material properties, Creating material, Applying material to elements, Changing the graphic properties of a material, Changing the appearance properties of a material. Sun settings: Specifying sun settings, Using sun path. Rendering, Decals, Walkthrough. Solar study: Setting up and creating solar study. Practice: Hands on.' },
+      { num:20, title:'Site Design & Toposurface', topics:'Site Design, Site Settings. Toposurface: Creating toposurface, Splitting a toposurface, Merging toposurface, Building pads, Property lines, Contour line labels, Parking components, Site components, Graded region. Practice: Hands on.' },
+      { num:21, title:'Worksharing', topics:'Working in a team, Worksharing over view, Worksharing terminology, Worksharing workflow, Worksharing display modes.' },
+      { num:22, title:'Linked Models, Point Clouds, Import/Export', topics:'Working with linked models: Link Revit, Visibility of linked models, Manage links, Shared positioning, Project base point and survey points. Working with point clouds files. Import/Link CAD: Manage links, Opening IFC. Export: Exporting to CAD formats, Exporting to dwg/dwf, Exporting to IFC, Creating Room DWF format, Linking DWF Mark-ups, Exporting to 3D\'s max, Area Report.' },
+      { num:23, title:'Design Options & Phasing', topics:'Design options: Design options workflow, Design option terminology, Consideration when using design options, Room areas and perimeter for design options, Design options and wall joins. Phasing: Phasing workflow, Phase properties, Demolish elements. Transferring project standards. Practice: Hands on.' },
+      { num:24, title:'Project Settings, Purge & Groups', topics:'Customizing project settings: Fill patterns, Line weights, Line pattern, Line styles. Purge unused objects. Interference check. Groups: Create groups, Modify groups, Saving groups, Loading groups.' },
+      { num:25, title:'Family Creation - Doors & Windows', topics:'Family creation: Reference planes, Reference lines, Constraints and dimensions. Creating door family: Drawing the door plan view components, Creating door panel solid geometry, Creating swing door family. Window family creation: Sliding window family, Creating arched window, Window family 3.' },
+      { num:26, title:'Furniture & Lighting Family', topics:'Creating new furniture family: Table family. Lighting fixture. Chandelier.' },
+      { num:27, title:'Face Based Family & Custom Staircase', topics:'Face based family: kitchen cabinet, door handle. Custom staircase: stair nosing, custom handrail, custom baluster.' },
+      { num:28, title:'Adaptive Components - Curtain Panel Patterns', topics:'Working with adaptive components: Adaptive components, Curtain panel pattern 1, Curtain panel pattern 2, Curtain panel pattern 3, Helix.' },
+      { num:29, title:'Adaptive Components - Grill & Curved Railing', topics:'Working with Adaptive Components: Grill design, Railing on curved surface, Reporting parameter, Dividing paths by distribution algorithm, Component repetition, Adaptive curved railing.' },
+      { num:30, title:'Revit Architecture 2014 Updates', topics:'Updates in Revit Architecture 2014: User interface and productivity enhancements, Displaced elements, Non rectangular viewports, Segmented elevation view, Schedules, Alternative dimension units, Change sort order of multiple items, Print option for regions, Materials, Stair by component enhancements, Import/Export, Energy analysis for Autodesk Revit, Modeling.' }
     ]
   }
 };
@@ -1503,6 +1539,12 @@ async function openStudentModal(docId) {
   document.getElementById('ed-faculty').value=s.faculty||'';
   document.getElementById('ed-slot').value=s.slot||'';
   document.getElementById('ed-status').value=s.status||'active';
+  if (s.admissionDate) {
+    const ad = new Date(s.admissionDate.seconds*1000);
+    document.getElementById('ed-admDate').value = ad.toISOString().slice(0,10);
+  } else {
+    document.getElementById('ed-admDate').value = '';
+  }
   document.getElementById('ed-studentId-display').textContent=s.studentId||'—';
   document.getElementById('ed-password-display').textContent='••••••••';
   document.getElementById('ed-password-display').dataset.real=s.password||'';
@@ -1701,6 +1743,24 @@ async function checkAndSendAbsenceReminders() {
   const snap = await getDocs(collection(db,'cadd_students'));
   const students = snap.docs.map(d=>({docId:d.id,...d.data()})).filter(s=>s.status==='active'||!s.status);
 
+  // Counts how many of the student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
+  // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
+  // don't count against a Mon-Thu student). If a student has no attendanceDays configured,
+  // falls back to counting every calendar day (old behaviour) so nothing breaks silently.
+  function scheduledDaysMissed(fromDate, attendanceDays) {
+    const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+    const now = new Date();
+    let missed = 0;
+    const cursor = new Date(fromDate); cursor.setHours(0,0,0,0);
+    const today = new Date(now); today.setHours(0,0,0,0);
+    cursor.setDate(cursor.getDate()+1); // start counting from the day AFTER their last attendance
+    while (cursor <= today) {
+      if (!days.length || days.includes(cursor.getDay())) missed++;
+      cursor.setDate(cursor.getDate()+1);
+    }
+    return missed;
+  }
+
   let sent = 0, skipped = 0;
   for (const s of students) {
     if (!s.email) { skipped++; continue; }
@@ -1710,11 +1770,11 @@ async function checkAndSendAbsenceReminders() {
     let daysSinceLast = 999;
     if (!attSnap.empty) {
       const lastCheckIn = new Date(attSnap.docs[0].data().checkIn.seconds * 1000);
-      daysSinceLast = Math.floor((Date.now() - lastCheckIn.getTime()) / 86400000);
+      daysSinceLast = scheduledDaysMissed(lastCheckIn, s.attendanceDays);
     } else {
-      // No attendance at all — check days since admission
+      // No attendance at all — check scheduled days since admission
       if (s.admissionDate) {
-        daysSinceLast = Math.floor((Date.now() - new Date(s.admissionDate.seconds*1000).getTime()) / 86400000);
+        daysSinceLast = scheduledDaysMissed(new Date(s.admissionDate.seconds*1000), s.attendanceDays);
       }
     }
     if (daysSinceLast >= 3) {
@@ -1840,6 +1900,7 @@ async function autoTickCurrentSessionForStudent(studentDocId) {
 }
 
 async function saveEditStudent() {
+  const admDateVal = document.getElementById('ed-admDate').value;
   const data={
     name:document.getElementById('ed-name').value.trim(),
     phone:document.getElementById('ed-phone').value.trim(),
@@ -1850,6 +1911,7 @@ async function saveEditStudent() {
     status:document.getElementById('ed-status').value,
     attendanceDays:Array.from(ed_selectedDays).sort()
   };
+  if (admDateVal) data.admissionDate = Timestamp.fromDate(new Date(admDateVal));
   try {
     await updateDoc(doc(db,'cadd_students',editingStudentId),data);
     const i=allStudents.findIndex(x=>x.docId===editingStudentId);
