@@ -667,10 +667,12 @@ const MODULE_CATALOGUE = [
   { id:'vray_max', name:'V-Ray for 3ds Max', category:'Visualisation', defaultWeeks:3 },
   { id:'revit_a', name:'Revit - A', category:'BIM', defaultWeeks:5 },
   { id:'sketchup', name:'SketchUp', category:'Design', defaultWeeks:3 },
+  { id:'vray_sketchup', name:'V-Ray for SketchUp', category:'Visualisation', defaultWeeks:2 },
   { id:'autocad2d_mech', name:'AutoCAD 2D Mechanical', category:'Mechanical', defaultWeeks:4 },
   { id:'solidworks', name:'SolidWorks', category:'Mechanical', defaultWeeks:6 },
   { id:'photoshop', name:'Photoshop', category:'Graphics', defaultWeeks:3 },
-  { id:'lumion', name:'Lumion', category:'Visualisation', defaultWeeks:2 }
+  { id:'lumion', name:'Lumion', category:'Visualisation', defaultWeeks:2 },
+  { id:'manual_drafting', name:'Manual Drafting', category:'Foundation', defaultWeeks:2 }
 ];
 
 // Real syllabus content — session-by-session breakdown for modules that have a defined curriculum.
@@ -695,6 +697,132 @@ const SYLLABUS_CATALOGUE = {
       { num:14, title:'Dynamic Blocks & Parametric Modeling', topics:'Symbol & BOM Creation: Dynamic Block. Parametric Modeling: Geometric Constraint, Dimensional Constraint, Design Centre, Tool Palette.' },
       { num:15, title:'OLE, Copy-Paste & External References', topics:'OLE concepts: Insert object, Olelinks, Olescale. Copy & Paste Concepts: Copy, Copybase, Copylink, Pasteclip, Pastespecial, Pasteblock, Paste original. External references: Xref, Xbind, Refedit.' },
       { num:16, title:'File Setup & Plot Control', topics:'File Setup: Hyperlink, Etransmit, Publish. Plot control: Introduction to plotting, Page setup, Plot Styles, Layout, Mview, Mspace, Pspace.' }
+    ]
+  },
+  autocad2d_mech: {
+    totalSessions: 16,
+    sessions: [
+      { num:1, title:'Introduction & Projections', topics:'Introduction: About CADD centre, AutoCAD History, Engineering Drawings. Projections (First & Third angle), Views (Orthographic, Isometric & Perspective). Exploring GUI, Workspaces. Co-ordinate systems.' },
+      { num:2, title:'Drawing Settings, Drawing & Modify Tools I', topics:'Drawing settings: Units. Drawing Tools: Line, Polyline, Circle, Rectangle, Arc, Ellipse, Polygon, Donut. Modify Tools: Trim, Extend, Erase, Undo, Redo, Explode, Join, Offset, Move, Copy, Rotate, Mirror, Array, Align, Scale, Stretch, Lengthen, Break, Fillet, Chamfer. File Management: New, Qnew, Open, Save, Save as, Close, Exit, Quit.' },
+      { num:3, title:'Drawing Settings, Drawing & Modify Tools II', topics:'Drawing settings: Units. Drawing Tools: Line, Polyline, Circle, Rectangle, Arc, Ellipse, Polygon, Donut. Modify Tools: Trim, Extend, Erase, Undo, Redo, Explode, Join, Offset, Move, Copy, Rotate, Mirror, Array, Align, Scale, Stretch, Lengthen, Break, Fillet, Chamfer. File Management: New, Qnew, Open, Save, Save as, Close, Exit, Quit.' },
+      { num:4, title:'Object Properties & Display Control', topics:'Object Properties: Color, Linetype, Ltscale, Lineweight, Properties, Matchprop. Display Control: Zoom, Pan, Regen, Clean Screen.' },
+      { num:5, title:'Dimensioning', topics:'Dimension: Linear, Aligned, Radius, Diameter, Center Mark, Angle, Arc length, Jogged radius, Ordinate dimensions, Continuous & Baseline dimension, Dimension Space, Dimension Break, Dimension Inspection, Tolerance.' },
+      { num:6, title:'Leader & Dimension Editing', topics:'Leader: Leader, Qleader, Mleader, Multi leader style, Add leader, Align Leader lines, Collect Leader. Dim edit, dimtedit, Dimension Associative, Reassociate, Dimension Style.' },
+      { num:7, title:'Layer Management', topics:'Layer Management: Adding / Removing Layers, New Property Filter, New Group Filter, Layer States Manager.' },
+      { num:8, title:'Advanced Drawing & Modify Tools', topics:'Drawing Tools: Multiline, Spline, Xline, Ray, Wipeout, Revision cloud. Modify Tools: MLstyle, MLedit, Pedit, Splinedit, Grip Editing.' },
+      { num:9, title:'Selection Methods & Measurement', topics:'Base, Object Selection Methods: Select, Qselect, Filter, Divide, Measure.' },
+      { num:10, title:'Hatching & Inquiry Commands', topics:'Hatching utilities: Hatch, Hatchedit, Gradient. Inquiry commands: Id, Dist, List, Radius, Angle, Area, Volume, Fill, Fill mode.' },
+      { num:11, title:'Annotation Tools', topics:'Annotation Tools: Text Style, Mtext, Scaletext, Spell, Table, Tablestyle, Tabledit.' },
+      { num:12, title:'Mechanical Views', topics:'Mechanical: Isometric View, Orthographic view.' },
+      { num:13, title:'Symbol & BOM Creation - Blocks', topics:'Symbol & BOM Creation: Block, Wblock, Insert. Attribute: Attdef, Attedit, Eattedit, Attdisp, Attdia, Attext, Eattext.' },
+      { num:14, title:'Dynamic Blocks & Parametric Modeling', topics:'Symbol & BOM Creation: Dynamic Block. Tool Palette, Design Centre, Action Recorder. Parametric Modeling: Geometric Constraint, Dimensional Constraint.' },
+      { num:15, title:'OLE, Copy-Paste & External Setup', topics:'OLE concepts: Insert object, Olelinks, Olescale. Etransmit, Hyperlink. Copy & Paste Concepts: Copy, Copybase, Copylink, Pastespecial, Pasteblock, Paste original.' },
+      { num:16, title:'External References & Plot Control', topics:'External references: Xref, Xbind, Refedit, Publish, Limits. Plot control: Introduction to plotting, Layout, Mview, Mspace, Pspace, Page setup, Plot Styles.' }
+    ]
+  },
+  '3dsmax': {
+    totalSessions: 20,
+    sessions: [
+      { num:1, title:'Introduction & Interface - Sofa Models', topics:'Creating a 3 Seater and single seater Sofa with different visual styles: Need for 3D, Introduction about 3ds Max Project work flow - Modeling, Texturing, Lighting, Animation, Rendering and Compositing. Definition for Max for Engineers/Architects. User interface - Command Panel, Main Toolbar, Customizing Viewport, View port controls. Different Visual styles (Quadro graphics card and recommended). Explain about different Output file formats - JPEG, GIFF, TIFF, AVI, BMP, TGA. Creating, Modifying & Transforming Standard primitives-All, Extended primitives-All. Creating objects using Key board entry, Naming the object.' },
+      { num:2, title:'Selection, Transform & Clone - Waiting Hall', topics:'Creating a waiting hall by using clone option and co-ordinate systems: Selection methods: Selection Region with Window/Crossing, Select by Name window, Named and Edit selection set, Select by object window. Transforming Objects: Move, Rotate, Uniform & Non-uniform Scaling, Using Axis constraints(X,Y,Z), Transform type in Window. Reference Co-ordinate System (View, Local, Pick). Pivot Point: Use Pivot point center, Use Selection center, Use Transform Coordinate center. Clone Method: Copy option.' },
+      { num:3, title:'Unit Setup, Grouping & Alignment - Auditorium', topics:'Creating an auditorium model: Unit Setup: System Unit Setup, Display Unit Scale. Group – Ungroup, Open, Close, Attach, Detach. Hierarchy (Affect Pivot Only, Affect Object only, Affect Hierarchy only, Center to Object, Align to Object, Align to World). Snap: 2D, 2.5D, 3D, Angular snap, Percent Snap. Utility tools: Align tool, Quick Align, Mirror, Array, Spacing tool, Clone and Align, Layer Manager.' },
+      { num:4, title:'Parametric Deformers - Chair Model', topics:'Creating a Chair model: Modeling using Parametric Deformers (Modifiers): Bend, Taper, Twist, Relax, Skew, Stretch, Mirror. Selection Modifiers: Mesh select, Poly select, Patch select.' },
+      { num:5, title:'Free Form Deformers - Pillow Model', topics:'Creating a Pillow model: Modeling using Free Form Deformers (Modifiers): FFD Box, FFD Cylinder, FFD2x2x2, FFD3x3x3, FFD4x4x4.' },
+      { num:6, title:'Poly Modeling - King Size Sofa', topics:'Creating a King size sofa model: Poly Modeling Tools: Convert to editable poly, Edit Poly-Selection, Soft selection, Edit polygons, Edit geometry, Polygon properties, Paint deformation. Poly Modeling: Creating a Set model.' },
+      { num:7, title:'Splines & Patch Modeling - Logo & Cushion Sofa', topics:'Creating a Logo model. Creating a Cushion sofa model. Shapes: Splines, Extended Splines. Edit Spline Modifier. Patch Modeling: Edit patch - Selection, Geometry, Surface properties. Patch Modeling using Shapes with 2D Snap, Edit spline modifier, Rendering, Interpolation, Selection, Soft selection, Geometry.' },
+      { num:8, title:'AEC Objects & Compound Objects - Building with Trees', topics:'Creating a building model with trees and plants. Modeling the building using AEC Extended objects: Wall, Railing, Foliage, Stairs, Doors and Windows. Compound Objects: Boolean, Pro-Boolean (Scatter, Connect).' },
+      { num:9, title:'2D Modifiers & Path/Patch Deform - Fountain Source', topics:'Creating Fountain source model. 2D Modifiers: Extrude, Lathe (Bevel Profile, Bevel, Cap holes, Sweep). Animation Modifiers (Path deform (WSM), Patch deform (WSM)).' },
+      { num:10, title:'Compound Objects & File Import - Cycle Model', topics:'Creating a Cycle model. Compound Object - Shape Merge, Loft, Deforming Loft objects: Scale, Twist & Teeter, Bevel. Importing ArchiCAD files, 3d AutoCAD files, Xref.' },
+      { num:11, title:'Material Editor - Architectural Material', topics:'Creating an architectural material for the building model. Slate Material Editor and Compact Material Editor: Tools in material editors, Extended parameters, Saving Materials.' },
+      { num:12, title:'Material Types & Maps', topics:'Creating a different types of materials to building model. Materials: Standard, Architectural, Multi/sub objects materials. Standard Material - Maps Rollout: Diffuse, Opacity, Raytrace, Bump, Reflection, Refraction.' },
+      { num:13, title:'Compound Materials - Wall & Partition', topics:'Applying special material to Wall and partition wall objects. Compound Materials: Blend, Double sided, Top/Bottom, Shellac materials.' },
+      { num:14, title:'Lighting - Interior & Exterior', topics:'Applying the light object to the building model interior and exterior. Standard Lights: Omni - General Parameters, Intensity/color/Attenuation, Advance effects, Shadow parameters, Shadow Map Parameters, Target & Free spot, Target & Free Direct, Sky light. Photometric lights: Target Light, Free Light, Exposure Controls, Templates, General Parameters, Shadows, Light Distribution, Intensity/Color/Attenuation, Light Shape.' },
+      { num:15, title:'Particle Systems & Space Warps - Water Fountain', topics:'Creating Water Fountain. Particle systems: Spray, Snow, Super spray. Space warps: Forces, Path Follow, Wind, Motor, Gravity. Deflectors: Deflector, UDeflector, Sdeflector.' },
+      { num:16, title:'Environment Effects - Fog, Water & Cloth', topics:'Creating Fog environment for the building model. Environment effects: Atmospheric effects, Bogizmo, Sphere Gizmo, CylGizmo, Fire – Fire Ball, Explosion, Tendril. Environment Effect: Volume Fog and Fog. Water Effect: Flex modifier, Attachment Constraint. Cloth Effect: Cloth Modifier.' },
+      { num:17, title:'Cameras & Animation - Walkthrough', topics:'Creating a Perspective view and animation walkthrough using camera. Cameras: Target Camera & Free Camera. Animation: Introduction to Key frame Animation, Path Animation – Path Constraint. Graph Editors: Track view Dope Sheet, Track view Curve Editor.' },
+      { num:18, title:'Advanced Rendering', topics:'Applying advanced rendering to get realistic effect for the building. Rendering: Scanline Rendering. Advanced Rendering: Quick Silver Hardware Rendering, Mentalray Rendering, Exposure Control, Advanced Lighting Dialog – Radiosity, Light Tracer, Advanced Lighting Override, Render to Texture, Iray rendering.' },
+      { num:19, title:'File Handling, Video Post & Export Formats', topics:'Handling other max files and applying external filter effects. File Handling: Merging max files, Render AVI files file formats, Print Size Wizard - TIFF. Video post Filter Events: Lens Effects Glow, Lens Effects Highlight, Lens Effects Flare. Composite Multiple AVI files into a single Avi file. Export File formats - Obj, Iges, 3ds.' },
+      { num:20, title:'Mini Project', topics:'Creating a mini project.' }
+    ]
+  },
+  vray_max: {
+    totalSessions: 7,
+    sessions: [
+      { num:1, title:'Introduction & Rendering Engines', topics:'Ep.1 Introduction: Introduction to Vray, Highlights of Vray and understanding the Graphical user Interface, understanding the Vray Frame Buffer. Ep.2 Vray Rendering Engines: Understanding the Rendering, Understanding the Production Rendering mode and Real-Time Rendering Mode.' },
+      { num:2, title:'Image Sampling & Rendering Settings', topics:'Ep.3 Vray Image Sampling: Understanding the concept of Image sampling, Understanding the antialiasing quality and shading quality. Ep.4 Rendering Settings: Controlling the quality of Interior and Exterior renderings using Render Settings.' },
+      { num:3, title:'V-Ray Lights & Ambient Occlusion', topics:'Ep.5 V-Ray Lights: Introduction to Lighting concept, Understanding the Vray Area lights and its various types and options for interior renderings. Ep.6 Light Details with Ambient Occlusions: Vray Lights and 3ds Max Lights, Understanding the Vray Ambient Lights, Vray Dome Light and its various settings, Creation of Vray IES Light and its various settings, Understanding the Sun and Sky Light and its various settings for exterior renderings.' },
+      { num:4, title:'GI Renderings - Exterior & Interior', topics:'Ep.7 GI Renderings: Introduction to GI Concept, Understanding the various rendering engines for primary and secondary engines. Ep.8 GI for Exterior and Interior Scenes: Understanding the GI settings for Exterior Scenes using various rendering engines, Understanding the GI settings for Interior scenes using various rendering engines.' },
+      { num:5, title:'GI for Animation & Caustic Effects', topics:'Ep.8 GI for Quick Animation renderings: Concept of Caustics effects, Understanding the GI for Quick Animation renderings and its various options. Ep.9 Caustic Effects: Concept of Caustics effects, Understanding the Settings and options in Lights and render setup for Caustics effect and creation of caustics effects.' },
+      { num:6, title:'Vray Materials, Refraction & Bump Mapping', topics:'Ep.10 Vray Materials: Introduction to Vray Materials, Creation of Vray Materials, understanding the Diffuse and Roughness parameters in Vray Materials, Understanding the Reflection property of a material and its various settings & creation of reflective materials. Ep.11 Refraction, Translucent & Bump Mapping: understanding the refraction property of a material and creation of refractive materials and various settings, Understanding the Translucent Property and creating Translucent materials using its various options, Understanding the Bump and normal mapping, Creation of Textured Metals and Brushed Metals using Maps.' },
+      { num:7, title:'Vray Environment & Perspective Fog', topics:'Ep.12 Vray Environment: Understanding the Vray Environment Fog Effect and its various settings, Creation of Vray Environment Fog Perspective effect.' }
+    ]
+  },
+  vray_sketchup: {
+    totalSessions: 7,
+    sessions: [
+      { num:1, title:'Introduction & Rendering Engines', topics:'Ep.1 Introduction: Introduction to Vray, Highlights of Vray and understanding the Graphical user Interface, understanding the Vray Frame Buffer. Ep.2 Vray Rendering Engines: Understanding the Rendering, Understanding the Production Rendering mode and Real-Time Rendering Mode.' },
+      { num:2, title:'Image Sampling & Rendering Settings', topics:'Ep.3 Vray Image Sampling: Understanding the concept of Image sampling, Understanding the antialiasing quality and shading quality. Ep.4 Rendering Settings: Controlling the quality of Interior and Exterior renderings using Render Settings.' },
+      { num:3, title:'V-Ray Lights & Ambient Occlusion', topics:'Ep.5 V-Ray Lights: Introduction to Lighting concept, Understanding the Vray Area lights and its various types and options for interior renderings. Ep.6 Light Details with Ambient Occlusions: Vray Lights and SketchUp Lights, Understanding the Vray Ambient Lights, Vray Dome Light and its various settings, Creation of Vray IES Light and its various settings, Understanding the Sun and Sky Light and its various settings for exterior renderings.' },
+      { num:4, title:'GI Renderings - Exterior & Interior', topics:'Ep.7 GI Renderings: Introduction to GI Concept, Understanding the various rendering engines for primary and secondary engines. Ep.8 GI for Exterior and Interior Scenes: Understanding the GI settings for Exterior Scenes using various rendering engines, Understanding the GI settings for Interior scenes using various rendering engines.' },
+      { num:5, title:'GI for Animation & Caustic Effects', topics:'Ep.8 GI for Quick Animation renderings: Concept of Caustics effects, Understanding the GI for Quick Animation renderings and its various options. Ep.9 Caustic Effects: Concept of Caustics effects, Understanding the Settings and options in Lights and render setup for Caustics effect and creation of caustics effects.' },
+      { num:6, title:'Vray Materials, Refraction & Bump Mapping', topics:'Ep.10 Vray Materials: Introduction to Vray Materials, Creation of Vray Materials, understanding the Diffuse and Roughness parameters in Vray Materials, Understanding the Reflection property of a material and its various settings & creation of reflective materials. Ep.11 Refraction, Translucent & Bump Mapping: understanding the refraction property of a material and creation of refractive materials and various settings, Understanding the Translucent Property and creating Translucent materials using its various options, Understanding the Bump and normal mapping, Creation of Textured Metals and Brushed Metals using Maps.' },
+      { num:7, title:'Vray Environment & Perspective Fog', topics:'Ep.12 Vray Environment: Understanding the Vray Environment Fog Effect and its various settings, Creation of Vray Environment Fog Perspective effect.' }
+    ]
+  },
+  manual_drafting: {
+    totalSessions: 10,
+    sessions: [
+      { num:1, title:'Study of Lines', topics:'Study of Lines: Horizontal Lines, Inclined Lines, Vertical Lines, Inclined Lines 45 degree.' },
+      { num:2, title:'Lettering, Line Types & Views', topics:'Single Stroke Lettering. Types of Lines. Study of Views.' },
+      { num:3, title:'Orthographic & Isometric Projection - Cube, Oblong, Chair', topics:'Orthographic Projection of Cube. Orthographic Projection of Oblong. Isometric Projection. Orthographic Projection and Isometric View of Chair. Single Seater Sofa Chair.' },
+      { num:4, title:'Orthographic Projection - Dressing Table & Wardrobe', topics:'Orthographic Projection of Dressing table. View of Dressing Table. Orthographic Projection of Wardrobe. View of Wardrobe.' },
+      { num:5, title:'Projection of Dining Table', topics:'Projection of Dining Table.' },
+      { num:6, title:'Plan & Section in British Scale', topics:'Plan in British Scale. Section in British Scale.' },
+      { num:7, title:'Shades, Shadow & Colour Wheel', topics:'Study of Shades and Shadow. Colour Wheel.' },
+      { num:8, title:'One Point Perspective', topics:'One Point Perspective: View of bedroom, View of Hall, View of Kitchen, View of Toilet and Bathroom.' },
+      { num:9, title:'Two Point Perspective', topics:'Two Point Perspective: View of Kitchen, View of Hall.' },
+      { num:10, title:'Exercise Project', topics:'Exercise Project.' }
+    ]
+  },
+  sketchup: {
+    totalSessions: 11,
+    sessions: [
+      { num:1, title:'Introduction to SketchUp', topics:'Introduction To SketchUp. Understanding Interface & Navigation.' },
+      { num:2, title:'Drawing Tools', topics:'Working With Drawing Tools – Line, Freehand, Rectangle, Circle, Arch, Polygon.' },
+      { num:3, title:'Modify Tools', topics:'Working With Modify Tools – Move, Copy, Rotate, Scale, Mirror, Linear Array, Polar Array.' },
+      { num:4, title:'3D Modelling Tools', topics:'3D Modelling Tools – Push Pull, Follow Me.' },
+      { num:5, title:'Groups, Components, Styles & Views', topics:'Model Group & Model Components. Graphic Display Styles – Face, Edge, Shadow, Sun Position. Standard Views & Camera Views.' },
+      { num:6, title:'Dimensions, Text & Tape Measure', topics:'Adding Dimensions, Text, Tape Measure.' },
+      { num:7, title:'Modelling Door & Window', topics:'Modelling Door & Window.' },
+      { num:8, title:'Modelling Furniture', topics:'Modelling Furniture – Sofa, Chair, Dining Table, Cupboard.' },
+      { num:9, title:'Paint Bucket & Materials', topics:'Paint Bucket – Applying Material, Creating New Material.' },
+      { num:10, title:'Modelling Building Facade', topics:'Modelling Building Facade.' },
+      { num:11, title:'Exercise Project', topics:'Exercise Project.' }
+    ]
+  },
+  photoshop: {
+    totalSessions: 20,
+    sessions: [
+      { num:1, title:'Introduction to Photoshop', topics:'Introduction to Photoshop. Vector & Raster images. Resolution. File Format – JEPG, PNG, TGA, TIFF, GIF. Open, New, Save, Save As.' },
+      { num:2, title:'Tool Box, Window & Palettes', topics:'Introduction to Tool Box, Window Palettes, Canvas, Palettes Option, Option Bar.' },
+      { num:3, title:'Selection Tools', topics:'Tool Box – Selection tool – Marques, Lasso, Magic & Quick selection, Crop, Slice, Move.' },
+      { num:4, title:'Path Tool', topics:'Path Tool – Path component selection, Direct selection.' },
+      { num:5, title:'Type, Shape & Pen Tool', topics:'Type tool, Shape tool, Pen tool.' },
+      { num:6, title:'Healing & Paint Brush', topics:'Healing brush, Paint Brush.' },
+      { num:7, title:'Clone & Pattern Stamp Tool', topics:'Clone & Pattern Stamp tool.' },
+      { num:8, title:'History Brush & Eraser Tool', topics:'History Brush tool, Eraser Tool.' },
+      { num:9, title:'Gradient & Paint Bucket Tool', topics:'Gradient, Paint Bucket Tool.' },
+      { num:10, title:'Smudge & Dodge Tool', topics:'Smudge & Dodge Tool.' },
+      { num:11, title:'Notes, Eye Dropper, Hand & Zoom Tool', topics:'Notes, Eye Dropper, Hand & Zoom Tool. Color Palettes – Foreground & Background.' },
+      { num:12, title:'Introduction to Layers', topics:'Introduction to Layers – Blending Mode, Master Layer opacity, Add Layer style, Layer Mask, New Layer, New Adjustments, Trash.' },
+      { num:13, title:'Brush Settings', topics:'Brush Settings – Brush Preset.' },
+      { num:14, title:'Transform Tools, Refine Edges & Filters', topics:'Transform Tools, Refine Edges, Filters.' },
+      { num:15, title:'3D Layers Option', topics:'3D – 3D Layers Option.' },
+      { num:16, title:'Lighting Effects', topics:'Lighting Effects.' },
+      { num:17, title:'Animation in Photoshop', topics:'Animation in Photoshop – Saving a GIF file.' },
+      { num:18, title:'Photo Manipulation', topics:'Photo manipulation – Background adding & removal.' },
+      { num:19, title:'AutoCAD Plan Texturing & Rendering', topics:'AutoCAD Plan Texturing & Rendering.' },
+      { num:20, title:'Mini Project', topics:'Mini Project.' }
     ]
   }
 };
