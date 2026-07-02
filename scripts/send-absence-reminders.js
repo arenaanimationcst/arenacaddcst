@@ -57,6 +57,24 @@ function toMillis(ts) {
   return null;
 }
 
+// Counts how many of the student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
+// have passed since `fromMs`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
+// don't count against a Mon-Thu student). If a student has no attendanceDays configured,
+// falls back to counting every calendar day (old behaviour) so nothing breaks silently.
+// Mirrors the same logic used in the manual "Send Absence Reminders" button in admin.html.
+function scheduledDaysMissed(fromMs, attendanceDays) {
+  const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+  const cursor = new Date(fromMs); cursor.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  cursor.setDate(cursor.getDate() + 1); // start counting the day AFTER their last attendance
+  let missed = 0;
+  while (cursor <= today) {
+    if (!days.length || days.includes(cursor.getDay())) missed++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return missed;
+}
+
 async function sendAbsenceEmail(student, daysAbsent) {
   const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
@@ -160,10 +178,10 @@ async function main() {
 
     let daysSinceLast;
     if (lastCheckInMs) {
-      daysSinceLast = Math.floor((Date.now() - lastCheckInMs) / 86400000);
+      daysSinceLast = scheduledDaysMissed(lastCheckInMs, s.attendanceDays);
     } else {
       const admMs = toMillis(s.admissionDate);
-      daysSinceLast = admMs ? Math.floor((Date.now() - admMs) / 86400000) : 0;
+      daysSinceLast = admMs ? scheduledDaysMissed(admMs, s.attendanceDays) : 0;
     }
 
     if (daysSinceLast >= ABSENCE_THRESHOLD_DAYS) {
