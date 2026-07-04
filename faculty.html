@@ -144,6 +144,23 @@
     .live-student-row .lsr-meta{font-size:11px;color:var(--text3);margin-top:1px;}
     .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px var(--green);}
 
+    /* Attendance log */
+    .search-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+    .search-row input, .search-row select{
+      background:var(--card);border:1px solid var(--border);border-radius:8px;color:#fff;
+      padding:9px 12px;font-size:12px;font-family:'Inter',sans-serif;outline:none;
+    }
+    .search-row input:focus, .search-row select:focus{border-color:var(--orange);}
+    #facAttSearch{flex:1;min-width:160px;}
+    .table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto;}
+    table{width:100%;border-collapse:collapse;font-size:12px;}
+    table thead th{
+      text-align:left;padding:10px 14px;color:var(--text3);font-weight:600;font-size:11px;
+      text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border);white-space:nowrap;
+    }
+    table tbody td{padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
+    table tbody tr:last-child td{border-bottom:none;}
+
     .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--dark);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none;}
     .toast.show{opacity:1;}
     .toast.success{border-color:var(--green);color:var(--green);}
@@ -203,7 +220,26 @@
     <button class="tab-btn active" id="tab-pending" onclick="switchFacTab('pending')">⏳ Pending Approvals</button>
     <button class="tab-btn" id="tab-students" onclick="switchFacTab('students')">👤 My Students</button>
     <button class="tab-btn" id="tab-live" onclick="switchFacTab('live')">🟢 Live Now</button>
+    <button class="tab-btn" id="tab-attlog" onclick="switchFacTab('attlog')">📅 Attendance Log</button>
   </div>
+
+  <!-- ATTENDANCE LOG TAB (this faculty's own students only) -->
+  <div id="facTabAttlog" style="display:none">
+    <div class="search-row">
+      <input type="text" id="facAttSearch" placeholder="Search by student name…" oninput="filterFacAttendance()"/>
+      <input type="date" id="facAttDateFrom" onchange="filterFacAttendance()"/>
+      <input type="date" id="facAttDateTo" onchange="filterFacAttendance()"/>
+      <button class="btn btn-orange" onclick="filterFacAttendance()">Filter</button>
+      <button class="btn btn-ghost" onclick="clearFacAttendanceFilters()">Clear</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Student</th><th>Course</th><th>Check In</th><th>Check Out</th><th>Hours</th></tr></thead>
+        <tbody id="facAttTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 
   <!-- LIVE NOW TAB -->
   <div id="facTabLive" style="display:none">
@@ -243,7 +279,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, updateDoc,
-  query, where, Timestamp
+  query, where, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -489,11 +525,87 @@ function switchFacTab(tab) {
   document.getElementById('facTabPending').style.display = tab === 'pending' ? 'block' : 'none';
   document.getElementById('facTabStudents').style.display = tab === 'students' ? 'block' : 'none';
   document.getElementById('facTabLive').style.display = tab === 'live' ? 'block' : 'none';
+  document.getElementById('facTabAttlog').style.display = tab === 'attlog' ? 'block' : 'none';
   document.getElementById('tab-pending').classList.toggle('active', tab === 'pending');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
   document.getElementById('tab-live').classList.toggle('active', tab === 'live');
+  document.getElementById('tab-attlog').classList.toggle('active', tab === 'attlog');
   if (tab === 'live') loadLiveSlots();
+  if (tab === 'attlog') loadFacAttendance();
 }
+
+// ── ATTENDANCE LOG (faculty's own students only) ──
+// Single field orderBy+limit query (no where clause, no composite index needed),
+// same approach as admin.html's Attendance Log — "is this my student" is filtered
+// client-side afterwards using the myStudents list already loaded on login.
+let facAttendance = [];
+async function loadFacAttendance() {
+  const tb = document.getElementById('facAttTable');
+  tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr>';
+  try {
+    const myDocIds = new Set(myStudents.map(s => s.docId));
+    const q = query(collection(db, 'cadd_attendance'), orderBy('checkIn', 'desc'), limit(1000));
+    const snap = await getDocs(q);
+    facAttendance = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => myDocIds.has(r.studentDocId));
+    renderFacAttendance(facAttendance);
+  } catch (e) {
+    console.error('Attendance log error:', e);
+    tb.innerHTML = `<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Error loading: ${e.message}</td></tr>`;
+  }
+}
+window.loadFacAttendance = loadFacAttendance;
+
+function renderFacAttendance(list) {
+  const tb = document.getElementById('facAttTable');
+  tb.innerHTML = '';
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No attendance records found for your students.</td></tr>';
+    return;
+  }
+  list.forEach(r => {
+    const ci = new Date(r.checkIn.seconds * 1000);
+    const co = r.checkOut ? new Date(r.checkOut.seconds * 1000) : null;
+    const hrs = co ? ((r.checkOut.seconds - r.checkIn.seconds) / 3600).toFixed(1) : '—';
+    const checkOutCell = co
+      ? co.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      : '<span style="color:var(--green)">● Active</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${ci.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' })}</td>
+      <td>${r.studentName || r.studentId}</td>
+      <td>${r.course || '—'}</td>
+      <td>${ci.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</td>
+      <td>${checkOutCell}</td>
+      <td style="color:var(--green)">${hrs}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function filterFacAttendance() {
+  const s = document.getElementById('facAttSearch').value.toLowerCase();
+  const from = document.getElementById('facAttDateFrom').value;
+  const to = document.getElementById('facAttDateTo').value;
+  const filtered = facAttendance.filter(r => {
+    const name = (r.studentName || r.studentId || '').toLowerCase();
+    const ds = new Date(r.checkIn.seconds * 1000).toISOString().split('T')[0];
+    if (s && !name.includes(s)) return false;
+    if (from && ds < from) return false;
+    if (to && ds > to) return false;
+    return true;
+  });
+  renderFacAttendance(filtered);
+}
+window.filterFacAttendance = filterFacAttendance;
+
+function clearFacAttendanceFilters() {
+  document.getElementById('facAttSearch').value = '';
+  document.getElementById('facAttDateFrom').value = '';
+  document.getElementById('facAttDateTo').value = '';
+  renderFacAttendance(facAttendance);
+}
+window.clearFacAttendanceFilters = clearFacAttendanceFilters;
 
 // ── LIVE SLOTS (faculty's own students only) ──
 // Single equality where() only (checkIn >= todayStart), matching the no-composite-index
@@ -751,6 +863,17 @@ const SYLLABUS_CATALOGUE = {
       { num:28, title:'Adaptive Components - Curtain Panel Patterns', topics:'Working with adaptive components: Adaptive components, Curtain panel pattern 1, Curtain panel pattern 2, Curtain panel pattern 3, Helix.' },
       { num:29, title:'Adaptive Components - Grill & Curved Railing', topics:'Working with Adaptive Components: Grill design, Railing on curved surface, Reporting parameter, Dividing paths by distribution algorithm, Component repetition, Adaptive curved railing.' },
       { num:30, title:'Revit Architecture 2014 Updates', topics:'Updates in Revit Architecture 2014: User interface and productivity enhancements, Displaced elements, Non rectangular viewports, Segmented elevation view, Schedules, Alternative dimension units, Change sort order of multiple items, Print option for regions, Materials, Stair by component enhancements, Import/Export, Energy analysis for Autodesk Revit, Modeling.' }
+    ]
+  }  ,
+  lumion: {
+    totalSessions: 6,
+    sessions: [
+      { num:1, title:'Introduction to Lumion & Interface', topics:'Introduction to Lumion, workflow overview. Importing models from SketchUp, Revit, AutoCAD, 3ds Max. Interface: Build Mode, Photo Mode, Movie Mode. Navigation controls, object library overview, saving and loading scenes.' },
+      { num:2, title:'Materials', topics:'Applying and editing materials, material library (standard, glass, water, grass, outdoor materials). Material properties: color, reflectivity, glossiness, relief/bump. Using layers with materials, custom material import (image textures).' },
+      { num:3, title:'Landscape & Nature', topics:'Terrain sculpting and painting. Adding grass, plants, trees from nature library. Water bodies. Placing People, Animals, Transport and other content library objects. Scatter/paint tools for placing large numbers of objects.' },
+      { num:4, title:'Lighting & Weather', topics:'Sun position and settings, sky and HDRI. Artificial lights: spotlight, point light, area light. Weather effects: clear, rain, fog, snow, clouds. Interior lighting for building interiors.' },
+      { num:5, title:'Effects & Photo Mode', topics:'Effect stack: reflection, shadow, ambient occlusion, color correction, depth of field, hyperlight, sky light. Photo Mode: composing and exporting high-resolution final renders. Saving styles and presets.' },
+      { num:6, title:'Animation & Rendering Output', topics:'Movie Mode: camera keyframes, animation paths, animation styles (walk, fly, pan). Rendering settings and output formats (image/video). Creating a short walkthrough/mini project and exporting final output.' }
     ]
   }
 };
