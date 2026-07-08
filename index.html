@@ -1012,14 +1012,15 @@ function renderSyllabusSection(modules) {
           </div>
         `;
       } else {
+        const practicedToday = sess.lastPracticedAt && new Date(sess.lastPracticedAt.seconds*1000).toDateString() === new Date().toDateString();
         bodyHtml = `
           <div class="syl-current-session">
             <div class="syl-session-label">Session ${currentNum} of ${totalSessions}</div>
             <div class="syl-session-title">${info.title}</div>
             ${info.topics ? `<div class="syl-session-topics">${info.topics}</div>` : ''}
             <button class="syl-tick-btn" onclick="tickSessionComplete('${modId}', ${currentNum})">✅ Mark this session complete</button>
-            <button class="syl-practice-btn" onclick="logPracticeSession('${modId}', ${currentNum})">📝 I practiced this (not a full session)</button>
-            ${sess.practiceCount ? `<div class="syl-practice-count">Practiced ${sess.practiceCount}x so far${sess.lastPracticedAt ? ' · last on ' + new Date(sess.lastPracticedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : ''}</div>` : ''}
+            <button class="syl-practice-btn" onclick="logPracticeSession('${modId}', ${currentNum})" ${practicedToday ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}>📝 ${practicedToday ? "Practice logged for today ✓" : "I practiced this (not a full session)"}</button>
+            ${sess.practiceCount ? `<div class="syl-practice-count">Practiced ${sess.practiceCount}x so far${sess.lastPracticedAt ? ' · last on ' + new Date(sess.lastPracticedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : ''}${practicedToday ? ' · come back tomorrow for another' : ''}</div>` : ''}
           </div>
         `;
       }
@@ -1096,6 +1097,20 @@ async function logPracticeSession(modId, sessionNum) {
       showToast('Session not found', 'error'); return;
     }
     const sess = data.modules[modId].sessions[sessionNum];
+
+    // Hard limit: 1 practice log per day per session — re-checked against the freshly
+    // fetched record (not just the cached UI state), so this can't be bypassed by
+    // spamming the button or re-opening the app before the UI refreshes.
+    if (sess.lastPracticedAt) {
+      const last = new Date(sess.lastPracticedAt.seconds * 1000);
+      if (last.toDateString() === new Date().toDateString()) {
+        showToast('You already logged practice for this today — come back tomorrow!', 'error');
+        currentStudent.modules = data.modules;
+        renderSyllabusSection(data.modules);
+        return;
+      }
+    }
+
     data.modules[modId].sessions[sessionNum] = {
       ...sess,
       practiceCount: (sess.practiceCount || 0) + 1,
