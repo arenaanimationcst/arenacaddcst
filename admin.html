@@ -187,16 +187,33 @@
     .toast.error{border-color:var(--red);color:var(--red);}
     .toast.warning{border-color:var(--yellow);color:var(--yellow);}
 
+    .mobile-menu-btn{display:none;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px 10px 4px 0;line-height:1;}
+    .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:199;}
+    .sidebar-backdrop.show{display:block;}
+
     @media(max-width:768px){
-      .sidebar{display:none;}
+      .mobile-menu-btn{display:block;}
+      .sidebar{
+        display:flex !important;flex-direction:column;position:fixed;top:0;left:0;height:100vh;
+        width:240px;z-index:200;transform:translateX(-100%);transition:transform 0.25s ease;
+        box-shadow:4px 0 24px rgba(0,0,0,0.4);
+      }
+      .sidebar.open{transform:translateX(0);}
       .stat-grid{grid-template-columns:repeat(2,1fr);}
       .form-grid{grid-template-columns:1fr;}
       .f-span2{grid-column:span 1;}
+      .content{padding:16px;}
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <script>emailjs.init('00R665dFCAdBZk8Zq');</script>
+  <link rel="manifest" href="admin-manifest.json"/>
+  <meta name="theme-color" content="#2E3542"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="CADDesk Admin"/>
+  <link rel="apple-touch-icon" href="icons/icon-180.png"/>
 </head>
 <body>
 
@@ -311,8 +328,8 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Faculty</th><th>Phone</th><th>Slot</th><th>Days</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody id="studentsTable"><tr><td colspan="9" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+          <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Faculty</th><th>Phone</th><th>Slot</th><th>Days</th><th>Status</th><th>Actions</th><th>Streak</th></tr></thead>
+          <tbody id="studentsTable"><tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -975,6 +992,9 @@ async function init() {
   populateDropdowns(); // refresh all dropdowns with faculty data
   await loadStudents();
   await loadAttendance();
+  renderStudents(allStudents); // re-render so the Streak column reflects attendance
+                                // (it rendered once already inside loadStudents(), before
+                                // allAttendance existed, so streaks would've shown as "—")
   await loadOverview();
 }
 
@@ -1354,9 +1374,34 @@ async function deleteFacultyConfirm() {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
+// Computes each student's live attendance streak purely from data already loaded in
+// memory (allAttendance / allStudents) — no extra Firestore reads. Schedule-aware via
+// scheduledDaysMissed(), same logic as the absence-reminder emails, so this column and
+// the emails always agree with each other.
+function getStudentStreakInfo(s) {
+  let lastCheckIn = null;
+  (allAttendance || []).forEach(r => {
+    if (r.studentDocId !== s.docId || !r.checkIn) return;
+    if (!lastCheckIn || r.checkIn.seconds > lastCheckIn.seconds) lastCheckIn = r.checkIn;
+  });
+  const baseTs = lastCheckIn || s.admissionDate;
+  if (!baseTs) return '<span style="color:var(--text3);font-size:11px">—</span>';
+
+  const baseDate = new Date(baseTs.seconds * 1000);
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays);
+  const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (missed === 0) {
+    return `<span style="color:var(--green);font-size:11px;font-weight:600">🟢 Regular</span><div style="color:var(--text3);font-size:10px">since ${dateLabel}</div>`;
+  }
+  const color = missed >= 3 ? 'var(--red)' : '#F0C040';
+  const dot = missed >= 3 ? '🔴' : '🟠';
+  return `<span style="color:${color};font-size:11px;font-weight:600">${dot} Absent ${missed}d</span><div style="color:var(--text3);font-size:10px">last seen ${dateLabel}</div>`;
+}
+
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
-  if(!list.length){tb.innerHTML='<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
+  if(!list.length){tb.innerHTML='<tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
   const shortDays=['S','M','T','W','T','F','S'];
   list.forEach(s=>{
     const daysStr = (s.attendanceDays && s.attendanceDays.length)
@@ -1381,7 +1426,8 @@ function renderStudents(list) {
           <option value="on_leave">🏖️ On Leave</option>
           <option value="deactivated">❌ Deactivate</option>
         </select>
-      </td>`;
+      </td>
+      <td>${getStudentStreakInfo(s)}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -1749,28 +1795,29 @@ function resendWelcomeEmailForCurrentStudent() {
 }
 window.resendWelcomeEmailForCurrentStudent = resendWelcomeEmailForCurrentStudent;
 
+// Counts how many of a student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
+// have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
+// don't count against a Mon-Thu student). If a student has no attendanceDays configured,
+// falls back to counting every calendar day so nothing breaks silently.
+// Shared by the absence-reminder check and the "Streak" column on the Students page.
+function scheduledDaysMissed(fromDate, attendanceDays) {
+  const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+  const now = new Date();
+  let missed = 0;
+  const cursor = new Date(fromDate); cursor.setHours(0,0,0,0);
+  const today = new Date(now); today.setHours(0,0,0,0);
+  cursor.setDate(cursor.getDate()+1); // start counting from the day AFTER their last attendance
+  while (cursor <= today) {
+    if (!days.length || days.includes(cursor.getDay())) missed++;
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return missed;
+}
+
 async function checkAndSendAbsenceReminders() {
   showToast('Checking absence reminders…', '');
   const snap = await getDocs(collection(db,'cadd_students'));
   const students = snap.docs.map(d=>({docId:d.id,...d.data()})).filter(s=>s.status==='active'||!s.status);
-
-  // Counts how many of the student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
-  // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
-  // don't count against a Mon-Thu student). If a student has no attendanceDays configured,
-  // falls back to counting every calendar day (old behaviour) so nothing breaks silently.
-  function scheduledDaysMissed(fromDate, attendanceDays) {
-    const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
-    const now = new Date();
-    let missed = 0;
-    const cursor = new Date(fromDate); cursor.setHours(0,0,0,0);
-    const today = new Date(now); today.setHours(0,0,0,0);
-    cursor.setDate(cursor.getDate()+1); // start counting from the day AFTER their last attendance
-    while (cursor <= today) {
-      if (!days.length || days.includes(cursor.getDay())) missed++;
-      cursor.setDate(cursor.getDate()+1);
-    }
-    return missed;
-  }
 
   let sent = 0, skipped = 0;
   for (const s of students) {
@@ -2285,6 +2332,20 @@ function switchTab(tab) {
 
 function closeModal(id) { document.getElementById(id).style.display='none'; }
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; }));
+</script>
+
+<!-- PWA: Register Service Worker (separate non-module script, runs independently) —
+     required for Chrome/Android's "Install app" prompt to appear; was previously missing
+     here even though index.html already had it, which is why admin.html never showed
+     the install option. -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(reg => { reg.update(); })
+        .catch(err => console.warn('Service worker registration failed:', err));
+    });
+  }
 </script>
 </body>
 </html>
