@@ -305,6 +305,46 @@ async function hashPassword(plain) {
 let currentFaculty = null;
 let myStudents = [];
 let detailStudentId = null;
+let facAttendance = [];
+
+// Counts how many of a student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
+// have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
+// don't count against a Mon-Thu student). Mirrors the identical helper in admin.html so
+// this Streak column and the absence-reminder emails always agree with each other.
+function scheduledDaysMissed(fromDate, attendanceDays) {
+  const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+  const cursor = new Date(fromDate); cursor.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  cursor.setDate(cursor.getDate() + 1); // start counting the day AFTER their last attendance
+  let missed = 0;
+  while (cursor <= today) {
+    if (!days.length || days.includes(cursor.getDay())) missed++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return missed;
+}
+
+// Computes a student's live attendance streak from already-loaded facAttendance / their
+// own admissionDate — no extra Firestore reads beyond the one fetch done at login.
+function getStudentStreakInfo(s) {
+  let lastCheckIn = null;
+  (facAttendance || []).forEach(r => {
+    if (r.studentDocId !== s.docId || !r.checkIn) return;
+    if (!lastCheckIn || r.checkIn.seconds > lastCheckIn.seconds) lastCheckIn = r.checkIn;
+  });
+  const baseTs = lastCheckIn || s.admissionDate;
+  if (!baseTs) return { html: '—', missed: -1 };
+
+  const baseDate = new Date(baseTs.seconds * 1000);
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays);
+  const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  if (missed === 0) {
+    return { html: `🟢 Regular <span style="color:var(--text3);font-weight:400">· since ${dateLabel}</span>`, missed };
+  }
+  const dot = missed >= 3 ? '🔴' : '🟠';
+  return { html: `${dot} Absent ${missed}d <span style="color:var(--text3);font-weight:400">· last seen ${dateLabel}</span>`, missed };
+}
 
 window.checkFacultyGate = checkFacultyGate;
 window.doFacultyLogout = doFacultyLogout;
@@ -398,6 +438,8 @@ async function loadDashboard() {
     );
   });
 
+  await fetchFacAttendance(); // needed before renderMyStudents() so the Streak column has data
+
   renderStats();
   renderPendingApprovals();
   renderMyStudents();
@@ -476,6 +518,19 @@ function renderPendingApprovals() {
   });
 }
 
+// Live-calculated validity status (mirrors the identical helper in admin.html and
+// index.html) — a missing/null validityEndDate always means "no restriction".
+function getValidityStatus(validityEndDate) {
+  if (!validityEndDate) return { state: 'unset', daysLeft: null, label: '—', color: 'var(--text3)' };
+  const end = new Date(validityEndDate.seconds * 1000); end.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysLeft = Math.round((end - today) / 86400000);
+  const dateLabel = end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (daysLeft < 0) return { state: 'expired', daysLeft, label: `🔴 Expired (was ${dateLabel})`, color: 'var(--red)' };
+  if (daysLeft <= 30) return { state: 'expiring', daysLeft, label: `🟠 ${dateLabel} · ${daysLeft}d left`, color: '#F0C040' };
+  return { state: 'active', daysLeft, label: `${dateLabel}`, color: 'var(--text2)' };
+}
+
 function renderMyStudents() {
   const wrap = document.getElementById('studentsList');
   if (!myStudents.length) {
@@ -500,6 +555,8 @@ function renderMyStudents() {
       });
     });
     const pct = totalMine ? Math.round((approvedMine / totalMine) * 100) : 0;
+    const streak = getStudentStreakInfo(s);
+    const validity = getValidityStatus(s.validityEndDate);
 
     const div = document.createElement('div');
     div.className = 'student-card';
@@ -516,6 +573,8 @@ function renderMyStudents() {
         <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${pct}%"></div></div>
         <div class="mini-bar-label">${approvedMine}/${totalMine} sessions approved (${pct}%)</div>
       </div>
+      <div style="margin-top:10px;font-size:11px;font-weight:600">${streak.html}</div>
+      ${validity.state !== 'unset' ? `<div style="margin-top:4px;font-size:11px;color:${validity.color}">📅 Course end: ${validity.label}</div>` : ''}
     `;
     wrap.appendChild(div);
   });
@@ -538,10 +597,10 @@ function switchFacTab(tab) {
 // Single field orderBy+limit query (no where clause, no composite index needed),
 // same approach as admin.html's Attendance Log — "is this my student" is filtered
 // client-side afterwards using the myStudents list already loaded on login.
-let facAttendance = [];
-async function loadFacAttendance() {
-  const tb = document.getElementById('facAttTable');
-  tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr>';
+// The actual fetch happens once in fetchFacAttendance() (called at login, so the
+// Streak column has data ready immediately) — this tab just re-renders that same
+// data, no extra Firestore reads spent switching tabs.
+async function fetchFacAttendance() {
   try {
     const myDocIds = new Set(myStudents.map(s => s.docId));
     const q = query(collection(db, 'cadd_attendance'), orderBy('checkIn', 'desc'), limit(1000));
@@ -549,11 +608,13 @@ async function loadFacAttendance() {
     facAttendance = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
       .filter(r => myDocIds.has(r.studentDocId));
-    renderFacAttendance(facAttendance);
   } catch (e) {
-    console.error('Attendance log error:', e);
-    tb.innerHTML = `<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Error loading: ${e.message}</td></tr>`;
+    console.error('Attendance fetch error:', e);
   }
+}
+
+function loadFacAttendance() {
+  renderFacAttendance(facAttendance);
 }
 window.loadFacAttendance = loadFacAttendance;
 
