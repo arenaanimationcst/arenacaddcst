@@ -383,6 +383,20 @@
     </div>
   </div>
 
+  <!-- COURSE VALIDITY EXPIRED (blocks access instead of the normal dashboard) -->
+  <div id="validityExpiredScreen" style="display:none">
+    <div class="login-hero">
+      <div style="font-size:44px;margin-bottom:6px">🔒</div>
+      <h1>Course Validity Expired</h1>
+    </div>
+    <div class="card" style="text-align:center">
+      <p style="color:var(--text-secondary);line-height:1.6" id="validityExpiredText">
+        Your course validity has expired. Please contact the institute admin to renew.
+      </p>
+      <button class="btn-primary" style="margin-top:16px" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
   <!-- DASHBOARD -->
   <div id="dashboard">
 
@@ -403,6 +417,11 @@
     <div class="leave-banner" id="notYourDayBanner" style="display:none">
       <span style="font-size:20px">📅</span>
       <p id="notYourDayText">Today isn't one of your scheduled attendance days.</p>
+    </div>
+
+    <div class="leave-banner" id="validityWarningBanner" style="display:none;background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.3)">
+      <span style="font-size:20px">⏳</span>
+      <p id="validityWarningText" style="color:#F0C040">Your course validity is expiring soon.</p>
     </div>
 
     <div class="leave-banner" id="doneForDayBanner" style="display:none;background:rgba(76,175,130,0.08);border-color:rgba(76,175,130,0.25)">
@@ -765,6 +784,21 @@ function getSyllabusSessionInfo(modId, sessionNum) {
 let currentStudentDocId = null; // used by syllabus tick handler
 
 let currentStudent = null;
+
+// Live-calculated every time it's called — nothing about validity is ever stored as a
+// status. If admin extends validityEndDate, the very next time this runs (student's next
+// login or page refresh) it just returns 'active' again — no separate "reactivate" step,
+// no delay. A missing/null validityEndDate always means "no restriction" (safe default for
+// existing students who never had this field set).
+function getValidityStatus(validityEndDate) {
+  if (!validityEndDate) return { state: 'unset', daysLeft: null };
+  const end = new Date(validityEndDate.seconds * 1000); end.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysLeft = Math.round((end - today) / 86400000);
+  if (daysLeft < 0) return { state: 'expired', daysLeft };
+  if (daysLeft <= 30) return { state: 'expiring', daysLeft };
+  return { state: 'active', daysLeft };
+}
 let activeSession = null;
 let clockInterval = null;
 
@@ -851,6 +885,16 @@ async function doLogin() {
       showToast('Your account has been deactivated. Contact admin.', 'error');
       btn.disabled=false; btn.textContent='Login →'; return;
     }
+    const validity = getValidityStatus(currentStudent.validityEndDate);
+    if (validity.state === 'expired') {
+      sessionStorage.setItem('cadd_student_docId', currentStudent.docId); // still let session-restore recognize them (so re-checking after admin extends works instantly)
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('validityExpiredText').textContent =
+        `Your course validity expired ${Math.abs(validity.daysLeft)} day${Math.abs(validity.daysLeft)===1?'':'s'} ago. Please contact the institute admin to renew.`;
+      document.getElementById('validityExpiredScreen').style.display='block';
+      btn.disabled=false; btn.textContent='Login →';
+      return;
+    }
     // Save session so page refresh doesn't log out
     sessionStorage.setItem('cadd_student_docId', currentStudent.docId);
     document.getElementById('loginScreen').style.display='none';
@@ -871,6 +915,14 @@ async function tryRestoreSession() {
     if (docSnap.exists()) {
       currentStudent = { docId: docSnap.id, ...docSnap.data() };
       if (currentStudent.status === 'deactivated') { sessionStorage.removeItem('cadd_student_docId'); return; }
+      const validity = getValidityStatus(currentStudent.validityEndDate);
+      if (validity.state === 'expired') {
+        document.getElementById('loginScreen').style.display='none';
+        document.getElementById('validityExpiredText').textContent =
+          `Your course validity expired ${Math.abs(validity.daysLeft)} day${Math.abs(validity.daysLeft)===1?'':'s'} ago. Please contact the institute admin to renew.`;
+        document.getElementById('validityExpiredScreen').style.display='block';
+        return;
+      }
       document.getElementById('loginScreen').style.display='none';
       document.getElementById('dashboard').style.display='block';
       await loadDashboard();
@@ -893,6 +945,20 @@ async function loadDashboard() {
   document.getElementById('dashInfo').textContent = (s.course||'') + (s.slot ? ' · ' + s.slot : '') + (s.faculty ? ' · ' + s.faculty : '');
   document.getElementById('avatarInitial').textContent = s.name.charAt(0).toUpperCase();
   const badge = document.getElementById('statusBadge');
+
+  // Course validity countdown — purely informational here (blocking already happened
+  // before loadDashboard() was ever called, in doLogin()/tryRestoreSession()).
+  const validity = getValidityStatus(s.validityEndDate);
+  const validityBanner = document.getElementById('validityWarningBanner');
+  if (validity.state === 'expiring') {
+    document.getElementById('validityWarningText').textContent =
+      validity.daysLeft === 0
+        ? 'Your course validity expires today. Please contact the institute admin to renew.'
+        : `Your course validity expires in ${validity.daysLeft} day${validity.daysLeft===1?'':'s'}. Please contact the institute admin to renew.`;
+    validityBanner.style.display = 'flex';
+  } else {
+    validityBanner.style.display = 'none';
+  }
 
   const todayDay = new Date().getDay();
   const allowedDays = s.attendanceDays || [];
