@@ -97,6 +97,7 @@
     .badge.active{background:rgba(76,175,130,0.15);color:var(--green);border:1px solid rgba(76,175,130,0.3);}
     .badge.leave{background:rgba(240,192,64,0.15);color:var(--yellow);border:1px solid rgba(240,192,64,0.3);}
     .badge.deactivated{background:rgba(224,92,106,0.15);color:var(--red);border:1px solid rgba(224,92,106,0.3);}
+    .badge.completed{background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3);}
 
     /* MODAL */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -250,6 +251,7 @@
     <div class="nav-item" data-page="liveSlots" onclick="showPage('liveSlots')"><span class="icon">🟢</span> Live Slots</div>
     <div class="nav-section">Students</div>
     <div class="nav-item" data-page="students" onclick="showPage('students')"><span class="icon">👤</span> All Students</div>
+    <div class="nav-item" data-page="validity" onclick="showPage('validity')"><span class="icon">📅</span> Validity</div>
     <div class="nav-item" data-page="addStudent" onclick="showPage('addStudent')"><span class="icon">➕</span> Add Student</div>
     <div class="nav-section">Faculty</div>
     <div class="nav-item" data-page="facultyAccounts" onclick="showPage('facultyAccounts')"><span class="icon">🧑‍🏫</span> Faculty Accounts</div>
@@ -312,6 +314,7 @@
           <option value="active">Active</option>
           <option value="on_leave">On Leave</option>
           <option value="deactivated">Deactivated</option>
+          <option value="completed">Completed</option>
         </select>
         <select id="filterFaculty" onchange="filterStudents()">
           <option value="">All Faculty</option>
@@ -330,6 +333,32 @@
         <table>
           <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Faculty</th><th>Phone</th><th>Slot</th><th>Days</th><th>Status</th><th>Actions</th><th>Streak</th></tr></thead>
           <tbody id="studentsTable"><tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- VALIDITY -->
+    <div class="page" id="page-validity">
+      <div class="page-header">
+        <h1>📅 Course Validity</h1>
+      </div>
+      <div class="search-row">
+        <input type="text" id="validitySearch" placeholder="Search by name or ID…" oninput="renderValidityPanel()"/>
+        <select id="validityFilter" onchange="renderValidityPanel()">
+          <option value="">All Students</option>
+          <option value="expired">🔴 Expired</option>
+          <option value="expiring">🟠 Expiring within 30 days</option>
+          <option value="active">🟢 Active / Not expiring soon</option>
+          <option value="unset">⚪ No validity date set</option>
+        </select>
+      </div>
+      <p style="color:var(--text3);font-size:12px;margin:-8px 0 14px">
+        Change the End Date below and it saves immediately. Extending an expired student's date reactivates their portal instantly on their next login — no separate "reactivate" step needed.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Start Date</th><th>End Date</th><th>Status</th></tr></thead>
+          <tbody id="validityTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -371,7 +400,12 @@
           </div>
           <div class="f-group">
             <label>Admission Date</label>
-            <input type="date" id="ns-admDate"/>
+            <input type="date" id="ns-admDate" onchange="autoFillValidityDate()"/>
+          </div>
+          <div class="f-group">
+            <label>Course Validity End Date</label>
+            <input type="date" id="ns-validityDate"/>
+            <div class="module-hint" style="margin-top:4px">Auto-suggested as 1 year from admission — change if the course duration is different.</div>
           </div>
           <div class="f-group f-span2">
             <label>Software Modules *</label>
@@ -575,11 +609,13 @@
             <div class="f-group"><label>Faculty</label><select id="ed-faculty"></select></div>
             <div class="f-group"><label>Slot</label><select id="ed-slot"></select></div>
             <div class="f-group"><label>Joining / Admission Date</label><input type="date" id="ed-admDate"/></div>
+            <div class="f-group"><label>Course Validity End Date</label><input type="date" id="ed-validityDate"/></div>
             <div class="f-group"><label>Status</label>
               <select id="ed-status">
                 <option value="active">Active</option>
                 <option value="on_leave">On Leave</option>
                 <option value="deactivated">Deactivated</option>
+                <option value="completed">🎓 Completed</option>
               </select>
             </div>
           </div>
@@ -992,9 +1028,9 @@ async function init() {
   populateDropdowns(); // refresh all dropdowns with faculty data
   await loadStudents();
   await loadAttendance();
-  renderStudents(allStudents); // re-render so the Streak column reflects attendance
-                                // (it rendered once already inside loadStudents(), before
-                                // allAttendance existed, so streaks would've shown as "—")
+  filterStudents(); // re-render so the Streak column reflects attendance
+                     // (it rendered once already inside loadStudents(), before
+                     // allAttendance existed, so streaks would've shown as "—")
   await loadOverview();
 }
 
@@ -1207,7 +1243,7 @@ async function removeFaculty(i) {
 async function loadStudents() {
   const snap=await getDocs(collection(db,'cadd_students'));
   allStudents=snap.docs.map(d=>({docId:d.id,...d.data()}));
-  renderStudents(allStudents);
+  filterStudents();
 }
 
 // ── FACULTY ACCOUNTS (login-capable, separate from old quick-label list) ──
@@ -1399,6 +1435,73 @@ function getStudentStreakInfo(s) {
   return `<span style="color:${color};font-size:11px;font-weight:600">${dot} Absent ${missed}d</span><div style="color:var(--text3);font-size:10px">last seen ${dateLabel}</div>`;
 }
 
+// ── VALIDITY ──
+// Course validity is never stored as a computed "expired" status — only the raw
+// validityEndDate is stored. Everything else (expired / expiring / active / unset) is
+// calculated live, right here, every time this runs. That's what makes "admin extends
+// the date by 3 days → student's portal just works again on their next load" true
+// without any background job: there's no stale status anywhere to get stuck.
+function getValidityStatus(validityEndDate) {
+  if (!validityEndDate) return { state: 'unset', daysLeft: null, label: 'No validity set', color: 'var(--text3)' };
+  const end = new Date(validityEndDate.seconds * 1000); end.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysLeft = Math.round((end - today) / 86400000);
+  if (daysLeft < 0) return { state: 'expired', daysLeft, label: `🔴 Expired ${Math.abs(daysLeft)}d ago`, color: 'var(--red)' };
+  if (daysLeft === 0) return { state: 'expiring', daysLeft, label: `🔴 Expires today`, color: 'var(--red)' };
+  if (daysLeft <= 30) return { state: 'expiring', daysLeft, label: `🟠 ${daysLeft} day${daysLeft===1?'':'s'} left`, color: '#F0C040' };
+  return { state: 'active', daysLeft, label: `🟢 ${daysLeft} days left`, color: 'var(--green)' };
+}
+
+function renderValidityPanel() {
+  const tb = document.getElementById('validityTable');
+  const search = (document.getElementById('validitySearch').value || '').toLowerCase();
+  const filterVal = document.getElementById('validityFilter').value;
+
+  // Deliberately shows ALL students regardless of status (active/completed/deactivated) —
+  // this panel is exactly where old students who never had a validity date should get
+  // one assigned, so nothing is hidden here the way the All Students page hides Completed.
+  let list = allStudents.filter(s => {
+    if (search && !((s.name||'').toLowerCase().includes(search) || (s.studentId||'').toLowerCase().includes(search))) return false;
+    const vs = getValidityStatus(s.validityEndDate);
+    if (filterVal && filterVal !== vs.state) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';
+    return;
+  }
+
+  tb.innerHTML = '';
+  list.forEach(s => {
+    const vs = getValidityStatus(s.validityEndDate);
+    const startLabel = s.admissionDate ? new Date(s.admissionDate.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+    const endVal = s.validityEndDate ? new Date(s.validityEndDate.seconds*1000).toISOString().slice(0,10) : '';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><code style="color:var(--orange);font-size:12px">${s.studentId||'—'}</code></td>
+      <td>${s.name||'—'}</td>
+      <td>${s.course||'—'}</td>
+      <td style="color:var(--text2);font-size:12px">${startLabel}</td>
+      <td><input type="date" value="${endVal}" onchange="updateValidityDate('${s.docId}', this.value)" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;color:#fff;padding:6px 8px;font-size:12px;"/></td>
+      <td style="color:${vs.color};font-size:12px;font-weight:600">${vs.label}</td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderValidityPanel = renderValidityPanel;
+
+async function updateValidityDate(docId, newDateVal) {
+  try {
+    const newTs = newDateVal ? Timestamp.fromDate(new Date(newDateVal)) : null;
+    await updateDoc(doc(db,'cadd_students',docId), { validityEndDate: newTs });
+    const s = allStudents.find(x => x.docId === docId);
+    if (s) s.validityEndDate = newTs;
+    showToast("Validity date updated — takes effect on student's next login", 'success');
+    renderValidityPanel();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.updateValidityDate = updateValidityDate;
+
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
   if(!list.length){tb.innerHTML='<tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
@@ -1425,6 +1528,7 @@ function renderStudents(list) {
           <option value="active">✅ Active</option>
           <option value="on_leave">🏖️ On Leave</option>
           <option value="deactivated">❌ Deactivate</option>
+          <option value="completed">🎓 Mark Completed</option>
         </select>
       </td>
       <td>${getStudentStreakInfo(s)}</td>`;
@@ -1487,6 +1591,10 @@ function filterStudents() {
   const dateFrom=document.getElementById('filterDateFrom').value;
   const dateTo=document.getElementById('filterDateTo').value;
   const filtered=allStudents.filter(x=>{
+    // When no status filter is chosen, hide "Completed" students by default (data stays
+    // safe in Firestore, just kept out of the everyday list). Selecting "Completed" from
+    // the dropdown — or any other specific status — always shows exactly that group.
+    if (!st && x.status==='completed') return false;
     if (s && !((x.name||'').toLowerCase().includes(s)||(x.studentId||'').toLowerCase().includes(s)||(x.phone||'').includes(s))) return false;
     if (c && x.course!==c) return false;
     if (st && !(x.status===st||(st==='active'&&!x.status))) return false;
@@ -1525,6 +1633,20 @@ function generateId() {
   document.getElementById('genPwDisplay').textContent=pw;
 }
 
+// Suggests a validity end date of "admission date + 1 year" whenever the admission date
+// changes — only if the validity field is still empty, so it never overwrites a value the
+// admin has already typed in manually.
+function autoFillValidityDate() {
+  const admVal = document.getElementById('ns-admDate').value;
+  const validityField = document.getElementById('ns-validityDate');
+  if (admVal && !validityField.value) {
+    const d = new Date(admVal);
+    d.setFullYear(d.getFullYear() + 1);
+    validityField.value = d.toISOString().slice(0, 10);
+  }
+}
+window.autoFillValidityDate = autoFillValidityDate;
+
 async function saveNewStudent() {
   const name=document.getElementById('ns-name').value.trim();
   const phone=document.getElementById('ns-phone').value.trim();
@@ -1533,6 +1655,7 @@ async function saveNewStudent() {
   const faculty=document.getElementById('ns-faculty').value;
   const slot=document.getElementById('ns-slot').value;
   const admDateVal=document.getElementById('ns-admDate').value;
+  const validityDateVal=document.getElementById('ns-validityDate').value;
   const studentId=document.getElementById('genIdDisplay').textContent;
   const password=document.getElementById('genPwDisplay').textContent;
   const modules=getSelectedModules('ns-modulePicker');
@@ -1554,6 +1677,7 @@ async function saveNewStudent() {
       modules, attendanceDays,
       status:'active',
       admissionDate: admDateVal ? Timestamp.fromDate(new Date(admDateVal)) : Timestamp.now(),
+      validityEndDate: validityDateVal ? Timestamp.fromDate(new Date(validityDateVal)) : null,
       createdAt: Timestamp.now()
     };
     const newDocRef = await addDoc(collection(db,'cadd_students'),data);
@@ -1571,7 +1695,7 @@ async function saveNewStudent() {
 }
 
 function resetAddForm() {
-  ['ns-name','ns-phone','ns-email','ns-admDate'].forEach(id=>document.getElementById(id).value='');
+  ['ns-name','ns-phone','ns-email','ns-admDate','ns-validityDate'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ns-course').value='';
   document.getElementById('ns-faculty').value='';
   document.getElementById('ns-slot').value='';
@@ -1601,6 +1725,12 @@ async function openStudentModal(docId) {
     document.getElementById('ed-admDate').value = ad.toISOString().slice(0,10);
   } else {
     document.getElementById('ed-admDate').value = '';
+  }
+  if (s.validityEndDate) {
+    const vd = new Date(s.validityEndDate.seconds*1000);
+    document.getElementById('ed-validityDate').value = vd.toISOString().slice(0,10);
+  } else {
+    document.getElementById('ed-validityDate').value = '';
   }
   document.getElementById('ed-studentId-display').textContent=s.studentId||'—';
   document.getElementById('ed-password-display').textContent='••••••••';
@@ -1959,6 +2089,7 @@ async function autoTickCurrentSessionForStudent(studentDocId) {
 
 async function saveEditStudent() {
   const admDateVal = document.getElementById('ed-admDate').value;
+  const validityDateVal = document.getElementById('ed-validityDate').value;
   const data={
     name:document.getElementById('ed-name').value.trim(),
     phone:document.getElementById('ed-phone').value.trim(),
@@ -1970,6 +2101,10 @@ async function saveEditStudent() {
     attendanceDays:Array.from(ed_selectedDays).sort()
   };
   if (admDateVal) data.admissionDate = Timestamp.fromDate(new Date(admDateVal));
+  // Explicitly set to null (not skipped) when cleared, so admin can remove a validity
+  // restriction entirely — a missing/null validityEndDate means "no restriction" everywhere
+  // this is checked (student portal, faculty column, Validity panel).
+  data.validityEndDate = validityDateVal ? Timestamp.fromDate(new Date(validityDateVal)) : null;
   try {
     await updateDoc(doc(db,'cadd_students',editingStudentId),data);
     const i=allStudents.findIndex(x=>x.docId===editingStudentId);
@@ -2319,6 +2454,7 @@ function showPage(id) {
   if (navEl) navEl.classList.add('active');
   if(id==='liveSlots') loadLiveSlots();
   if(id==='facultyAccounts') loadFacultyAccounts();
+  if(id==='validity') renderValidityPanel();
 }
 
 function switchTab(tab) {
