@@ -180,8 +180,12 @@ async function main() {
     if (lastCheckInMs) {
       daysSinceLast = scheduledDaysMissed(lastCheckInMs, s.attendanceDays);
     } else {
-      const admMs = toMillis(s.admissionDate);
-      daysSinceLast = admMs ? scheduledDaysMissed(admMs, s.attendanceDays) : 0;
+      // Prefer trackingStartDate (when THIS app started tracking them) over admissionDate
+      // (their real-world join date, which for an old student freshly onboarded into this
+      // app could be months ago — using it here would send a false absence email on day
+      // one). See bulkSetTrackingStartToday() in admin.html for the one-time migration.
+      const baseMs = toMillis(s.trackingStartDate) || toMillis(s.admissionDate);
+      daysSinceLast = baseMs ? scheduledDaysMissed(baseMs, s.attendanceDays) : 0;
     }
 
     if (daysSinceLast >= ABSENCE_THRESHOLD_DAYS) {
