@@ -328,6 +328,7 @@
         <input type="date" id="filterDateFrom" title="Admission date from" onchange="filterStudents()"/>
         <input type="date" id="filterDateTo" title="Admission date to" onchange="filterStudents()"/>
         <button class="btn btn-ghost btn-sm" onclick="clearStudentFilters()">Clear Filters</button>
+        <button class="btn btn-orange btn-sm" onclick="bulkSetTrackingStartToday()" title="One-time: for students who never had attendance tracked before this app existed, sets their tracking-start to today so they don't show false absences">⚙️ Fix Streaks for Old Students</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -610,6 +611,7 @@
             <div class="f-group"><label>Slot</label><select id="ed-slot"></select></div>
             <div class="f-group"><label>Joining / Admission Date</label><input type="date" id="ed-admDate"/></div>
             <div class="f-group"><label>Course Validity End Date</label><input type="date" id="ed-validityDate"/></div>
+            <div class="f-group"><label>App Start Date <span style="color:var(--text3);font-weight:400">(streak/absence tracking begins from here)</span></label><input type="date" id="ed-trackingStartDate"/></div>
             <div class="f-group"><label>Status</label>
               <select id="ed-status">
                 <option value="active">Active</option>
@@ -1420,7 +1422,11 @@ function getStudentStreakInfo(s) {
     if (r.studentDocId !== s.docId || !r.checkIn) return;
     if (!lastCheckIn || r.checkIn.seconds > lastCheckIn.seconds) lastCheckIn = r.checkIn;
   });
-  const baseTs = lastCheckIn || s.admissionDate;
+  // Falls back to trackingStartDate (when THIS app started tracking them) before
+  // admissionDate (their real-world join date, which for an old student being freshly
+  // onboarded into this app could be months ago — that would wrongly show a huge
+  // "Absent Nd" streak on day one). See bulkSetTrackingStartToday().
+  const baseTs = lastCheckIn || s.trackingStartDate || s.admissionDate;
   if (!baseTs) return '<span style="color:var(--text3);font-size:11px">—</span>';
 
   const baseDate = new Date(baseTs.seconds * 1000);
@@ -1501,6 +1507,35 @@ async function updateValidityDate(docId, newDateVal) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.updateValidityDate = updateValidityDate;
+
+// One-time migration helper: any student who was added to Firestore before this field
+// existed (or any old student being onboarded into the app for the first time) has no
+// trackingStartDate. Without it, streak/absence-reminder math falls back to admissionDate
+// — which could be months old — making a perfectly fine student look like they've been
+// absent for months on day one. This sets trackingStartDate = today for exactly those
+// students, once, on demand.
+async function bulkSetTrackingStartToday() {
+  const missing = allStudents.filter(s => !s.trackingStartDate);
+  if (!missing.length) {
+    showToast('Every student already has a tracking start date — nothing to fix.', 'success');
+    return;
+  }
+  if (!confirm(`This will set "tracking starts today" for ${missing.length} student(s) who don't have it yet — so they won't show false absence streaks. Their real Admission Date is untouched. Continue?`)) return;
+
+  showToast(`Updating ${missing.length} student(s)…`, '');
+  const now = Timestamp.now();
+  let done = 0, failed = 0;
+  for (const s of missing) {
+    try {
+      await updateDoc(doc(db,'cadd_students', s.docId), { trackingStartDate: now });
+      s.trackingStartDate = now;
+      done++;
+    } catch(e) { failed++; }
+  }
+  showToast(`Done — ${done} student(s) fixed${failed ? `, ${failed} failed` : ''}.`, failed ? 'error' : 'success');
+  filterStudents();
+}
+window.bulkSetTrackingStartToday = bulkSetTrackingStartToday;
 
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
@@ -1677,6 +1712,11 @@ async function saveNewStudent() {
       modules, attendanceDays,
       status:'active',
       admissionDate: admDateVal ? Timestamp.fromDate(new Date(admDateVal)) : Timestamp.now(),
+      // Separate from admissionDate on purpose: admissionDate is the student's real-world
+      // join date (used for validity Start Date / records). trackingStartDate is when THIS
+      // APP started tracking their attendance — for a brand new student these are the same
+      // day, so streak/absence-reminder math is correct from day one.
+      trackingStartDate: Timestamp.now(),
       validityEndDate: validityDateVal ? Timestamp.fromDate(new Date(validityDateVal)) : null,
       createdAt: Timestamp.now()
     };
@@ -1731,6 +1771,12 @@ async function openStudentModal(docId) {
     document.getElementById('ed-validityDate').value = vd.toISOString().slice(0,10);
   } else {
     document.getElementById('ed-validityDate').value = '';
+  }
+  if (s.trackingStartDate) {
+    const td = new Date(s.trackingStartDate.seconds*1000);
+    document.getElementById('ed-trackingStartDate').value = td.toISOString().slice(0,10);
+  } else {
+    document.getElementById('ed-trackingStartDate').value = '';
   }
   document.getElementById('ed-studentId-display').textContent=s.studentId||'—';
   document.getElementById('ed-password-display').textContent='••••••••';
@@ -1960,9 +2006,12 @@ async function checkAndSendAbsenceReminders() {
       const lastCheckIn = new Date(attSnap.docs[0].data().checkIn.seconds * 1000);
       daysSinceLast = scheduledDaysMissed(lastCheckIn, s.attendanceDays);
     } else {
-      // No attendance at all — check scheduled days since admission
-      if (s.admissionDate) {
-        daysSinceLast = scheduledDaysMissed(new Date(s.admissionDate.seconds*1000), s.attendanceDays);
+      // No attendance at all — check scheduled days since tracking started in THIS app
+      // (falls back to admissionDate only if trackingStartDate was never set, e.g. for
+      // students created before this field existed and not yet migrated).
+      const baseDate = s.trackingStartDate || s.admissionDate;
+      if (baseDate) {
+        daysSinceLast = scheduledDaysMissed(new Date(baseDate.seconds*1000), s.attendanceDays);
       }
     }
     if (daysSinceLast >= 3) {
@@ -1992,7 +2041,9 @@ async function loadModalAttendance(docId, s) {
     if(r.checkOut){totalHrs+=(r.checkOut.seconds-r.checkIn.seconds)/3600;}
     presentDays.add(new Date(r.checkIn.seconds*1000).toDateString());
   });
-  const admDate=s.admissionDate?new Date(s.admissionDate.seconds*1000):new Date();
+  // Uses trackingStartDate (when THIS app started tracking them) rather than admissionDate
+  // (their real-world join date, which could predate this app and inflate "days absent").
+  const admDate=s.trackingStartDate?new Date(s.trackingStartDate.seconds*1000):(s.admissionDate?new Date(s.admissionDate.seconds*1000):new Date());
   const totalDays=Math.floor((new Date()-admDate)/864e5)+1;
 
   document.getElementById('ms-days').textContent=presentDays.size;
@@ -2090,6 +2141,7 @@ async function autoTickCurrentSessionForStudent(studentDocId) {
 async function saveEditStudent() {
   const admDateVal = document.getElementById('ed-admDate').value;
   const validityDateVal = document.getElementById('ed-validityDate').value;
+  const trackingStartVal = document.getElementById('ed-trackingStartDate').value;
   const data={
     name:document.getElementById('ed-name').value.trim(),
     phone:document.getElementById('ed-phone').value.trim(),
@@ -2105,6 +2157,9 @@ async function saveEditStudent() {
   // restriction entirely — a missing/null validityEndDate means "no restriction" everywhere
   // this is checked (student portal, faculty column, Validity panel).
   data.validityEndDate = validityDateVal ? Timestamp.fromDate(new Date(validityDateVal)) : null;
+  // Same explicit-null pattern for trackingStartDate — clearing it means streak/absence
+  // math falls back to admissionDate again (see getStudentStreakInfo / scheduledDaysMissed).
+  data.trackingStartDate = trackingStartVal ? Timestamp.fromDate(new Date(trackingStartVal)) : null;
   try {
     await updateDoc(doc(db,'cadd_students',editingStudentId),data);
     const i=allStudents.findIndex(x=>x.docId===editingStudentId);
