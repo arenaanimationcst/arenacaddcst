@@ -332,7 +332,9 @@ function getStudentStreakInfo(s) {
     if (r.studentDocId !== s.docId || !r.checkIn) return;
     if (!lastCheckIn || r.checkIn.seconds > lastCheckIn.seconds) lastCheckIn = r.checkIn;
   });
-  const baseTs = lastCheckIn || s.admissionDate;
+  // Falls back to trackingStartDate (when THIS app started tracking them) before
+  // admissionDate — same fix as admin.html, see bulkSetTrackingStartToday() there.
+  const baseTs = lastCheckIn || s.trackingStartDate || s.admissionDate;
   if (!baseTs) return { html: '—', missed: -1 };
 
   const baseDate = new Date(baseTs.seconds * 1000);
