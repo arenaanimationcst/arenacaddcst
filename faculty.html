@@ -344,6 +344,11 @@ function getStudentStreakInfo(s) {
   if (missed === 0) {
     return { html: `🟢 Regular <span style="color:var(--text3);font-weight:400">· since ${dateLabel}</span>`, missed };
   }
+  // Caps at "Follow up needed" (10d+) — the more severe "Call Parents" escalation (13d+)
+  // is admin-only by design, so faculty never sees it here even for a very long absence.
+  if (missed >= 10) {
+    return { html: `<span style="color:#F0C040">⚠️ Follow up needed</span> <span style="color:var(--text3);font-weight:400">· ${missed}d absent, last seen ${dateLabel}</span>`, missed };
+  }
   const dot = missed >= 3 ? '🔴' : '🟠';
   return { html: `${dot} Absent ${missed}d <span style="color:var(--text3);font-weight:400">· last seen ${dateLabel}</span>`, missed };
 }
