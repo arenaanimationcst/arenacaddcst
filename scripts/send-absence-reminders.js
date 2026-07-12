@@ -23,6 +23,7 @@ const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 
 const ABSENCE_THRESHOLD_DAYS = 3; // same rule as the manual "Send Absence Reminders" button in admin.html
+const REMINDER_REPEAT_DAYS = 7; // once the first reminder is sent, don't nag again until this many more scheduled days pass
 
 const EMAILJS_SERVICE = 'service_ps84vnc';
 const EMAILJS_ABSENCE_TEMPLATE = 'template_8elds0n';
@@ -176,9 +177,10 @@ async function main() {
       if (ms && (!lastCheckInMs || ms > lastCheckInMs)) lastCheckInMs = ms;
     });
 
-    let daysSinceLast;
+    let daysSinceLast, anchorMs;
     if (lastCheckInMs) {
       daysSinceLast = scheduledDaysMissed(lastCheckInMs, s.attendanceDays);
+      anchorMs = lastCheckInMs;
     } else {
       // Prefer trackingStartDate (when THIS app started tracking them) over admissionDate
       // (their real-world join date, which for an old student freshly onboarded into this
@@ -186,24 +188,44 @@ async function main() {
       // one). See bulkSetTrackingStartToday() in admin.html for the one-time migration.
       const baseMs = toMillis(s.trackingStartDate) || toMillis(s.admissionDate);
       daysSinceLast = baseMs ? scheduledDaysMissed(baseMs, s.attendanceDays) : 0;
+      anchorMs = baseMs;
     }
 
     if (daysSinceLast >= ABSENCE_THRESHOLD_DAYS) {
-      try {
-        await sendAbsenceEmail(s, daysSinceLast);
-        console.log(`✅ Sent: ${s.name} (${daysSinceLast} days absent)`);
-        notifiedList.push({ name: s.name, course: s.course || '—', days: daysSinceLast });
-        sent++;
-      } catch (e) {
-        console.error(`❌ Failed for ${s.name}:`, e.message);
-        failed++;
+      // Anti-spam: don't re-send every single day for the same ongoing absence. `anchorMs`
+      // identifies WHICH absence streak this is (it changes the moment the student checks
+      // in again, since lastCheckInMs then moves forward) — so a genuinely new/fresh
+      // absence always reminds immediately at day 3, but an ongoing one only reminds again
+      // every REMINDER_REPEAT_DAYS days (day 3, day 10, day 17, ...) instead of daily.
+      const sameStreak = s.absReminderAnchorMs === anchorMs;
+      const daysSinceLastReminder = sameStreak ? (daysSinceLast - (s.absReminderDaysSinceLast || 0)) : Infinity;
+      const shouldSend = !sameStreak || daysSinceLastReminder >= REMINDER_REPEAT_DAYS;
+
+      if (shouldSend) {
+        try {
+          await sendAbsenceEmail(s, daysSinceLast);
+          console.log(`✅ Sent: ${s.name} (${daysSinceLast} days absent)`);
+          notifiedList.push({ name: s.name, course: s.course || '—', days: daysSinceLast });
+          await db.collection('cadd_students').doc(s.docId).update({
+            absReminderAnchorMs: anchorMs,
+            absReminderDaysSinceLast: daysSinceLast,
+            absReminderSentAt: admin.firestore.Timestamp.now()
+          });
+          sent++;
+        } catch (e) {
+          console.error(`❌ Failed for ${s.name}:`, e.message);
+          failed++;
+        }
+      } else {
+        console.log(`⏭️  Skipped (already reminded ${daysSinceLastReminder}d ago, next at ${REMINDER_REPEAT_DAYS}d): ${s.name}`);
+        skipped++;
       }
     }
   }
 
   await sendAdminSummaryEmail(notifiedList);
 
-  console.log(`\nDone. Sent: ${sent} | Skipped (no email on file): ${skipped} | Failed: ${failed}`);
+  console.log(`\nDone. Sent: ${sent} | Skipped (no email on file, or already reminded recently): ${skipped} | Failed: ${failed}`);
 }
 
 main().catch(e => { console.error('Fatal error:', e); process.exit(1); });
