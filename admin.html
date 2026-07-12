@@ -1436,6 +1436,15 @@ function getStudentStreakInfo(s) {
   if (missed === 0) {
     return `<span style="color:var(--green);font-size:11px;font-weight:600">🟢 Regular</span><div style="color:var(--text3);font-size:10px">since ${dateLabel}</div>`;
   }
+  // Escalation ladder: 3d+ triggers the automated email (see checkAndSendAbsenceReminders /
+  // scripts/send-absence-reminders.js), 10d+ is a faculty follow-up flag (shown in
+  // faculty.html), 13d+ is the most severe — admin-only "call the parents personally" flag.
+  if (missed >= 13) {
+    return `<span style="color:var(--red);font-size:12px;font-weight:700">🚨 Call Parents · ${missed}d</span><div style="color:var(--text3);font-size:10px">last seen ${dateLabel}</div>`;
+  }
+  if (missed >= 10) {
+    return `<span style="color:#F0C040;font-size:11px;font-weight:700">⚠️ Follow up needed · ${missed}d</span><div style="color:var(--text3);font-size:10px">last seen ${dateLabel}</div>`;
+  }
   const color = missed >= 3 ? 'var(--red)' : '#F0C040';
   const dot = missed >= 3 ? '🔴' : '🟠';
   return `<span style="color:${color};font-size:11px;font-weight:600">${dot} Absent ${missed}d</span><div style="color:var(--text3);font-size:10px">last seen ${dateLabel}</div>`;
@@ -1994,6 +2003,7 @@ async function checkAndSendAbsenceReminders() {
   showToast('Checking absence reminders…', '');
   const snap = await getDocs(collection(db,'cadd_students'));
   const students = snap.docs.map(d=>({docId:d.id,...d.data()})).filter(s=>s.status==='active'||!s.status);
+  const REMINDER_REPEAT_DAYS = 7; // once the first reminder is sent, don't nag again until this many more scheduled days pass — same rule as scripts/send-absence-reminders.js
 
   let sent = 0, skipped = 0;
   for (const s of students) {
@@ -2001,10 +2011,11 @@ async function checkAndSendAbsenceReminders() {
     // Find their most recent attendance record
     const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',s.docId), orderBy('checkIn','desc'), limit(1));
     const attSnap = await getDocs(q);
-    let daysSinceLast = 999;
+    let daysSinceLast = 999, anchorMs = null;
     if (!attSnap.empty) {
       const lastCheckIn = new Date(attSnap.docs[0].data().checkIn.seconds * 1000);
       daysSinceLast = scheduledDaysMissed(lastCheckIn, s.attendanceDays);
+      anchorMs = lastCheckIn.getTime();
     } else {
       // No attendance at all — check scheduled days since tracking started in THIS app
       // (falls back to admissionDate only if trackingStartDate was never set, e.g. for
@@ -2012,15 +2023,26 @@ async function checkAndSendAbsenceReminders() {
       const baseDate = s.trackingStartDate || s.admissionDate;
       if (baseDate) {
         daysSinceLast = scheduledDaysMissed(new Date(baseDate.seconds*1000), s.attendanceDays);
+        anchorMs = baseDate.seconds * 1000;
       }
     }
     if (daysSinceLast >= 3) {
+      // Anti-spam: same "don't re-send every day for the same ongoing absence" rule as the
+      // automated daily script — anchorMs identifies WHICH absence streak this is.
+      const sameStreak = s.absReminderAnchorMs === anchorMs;
+      const daysSinceLastReminder = sameStreak ? (daysSinceLast - (s.absReminderDaysSinceLast || 0)) : Infinity;
+      if (sameStreak && daysSinceLastReminder < REMINDER_REPEAT_DAYS) { skipped++; continue; }
       try {
         await emailjs.send(EMAILJS_SERVICE, EMAILJS_ABSENCE_TEMPLATE, {
           to_email: s.email,
           student_name: s.name,
           student_course: s.course || '—',
           days_absent: daysSinceLast
+        });
+        await updateDoc(doc(db,'cadd_students',s.docId), {
+          absReminderAnchorMs: anchorMs,
+          absReminderDaysSinceLast: daysSinceLast,
+          absReminderSentAt: Timestamp.now()
         });
         sent++;
       } catch(e) {
