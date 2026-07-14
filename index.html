@@ -1204,8 +1204,13 @@ async function loadStats() {
     presentDays.add(new Date(r.checkIn.seconds*1000).toDateString());
   });
 
-  const admDate = currentStudent.admissionDate ? new Date(currentStudent.admissionDate.seconds*1000) : new Date();
-  const totalDays = Math.floor((new Date()-admDate)/(864e5))+1;
+  // Uses trackingStartDate (when THIS app started tracking them) rather than admissionDate
+  // (their real-world join date, which could predate this app and inflate "days absent" —
+  // same fix as the admin panel's student-detail modal).
+  const baseDate = currentStudent.trackingStartDate
+    ? new Date(currentStudent.trackingStartDate.seconds*1000)
+    : (currentStudent.admissionDate ? new Date(currentStudent.admissionDate.seconds*1000) : new Date());
+  const totalDays = Math.floor((new Date()-baseDate)/(864e5))+1;
   const absentDays = Math.max(0, totalDays - presentDays.size);
 
   document.getElementById('statDays').textContent = presentDays.size;
