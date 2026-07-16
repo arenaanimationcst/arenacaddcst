@@ -342,6 +342,37 @@
     .toast.error { border-color:var(--danger); color:var(--danger); }
     .toast.warning { border-color:var(--warning); color:var(--warning); }
 
+    /* Feedback */
+    .fb-rating-group { margin-bottom: 18px; }
+    .fb-rating-group label { display:block; font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; }
+    .fb-rating-row { display:flex; align-items:center; gap:12px; }
+    .fb-rating-row input[type=range] {
+      flex:1; -webkit-appearance:none; height:6px; border-radius:4px;
+      background: var(--cadd-border); outline:none;
+    }
+    .fb-rating-row input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; width:20px; height:20px; border-radius:50%;
+      background: var(--cadd-orange); cursor:pointer; box-shadow:0 2px 6px rgba(244,121,32,0.5);
+    }
+    .fb-rating-row input[type=range]::-moz-range-thumb {
+      width:20px; height:20px; border-radius:50%; border:none;
+      background: var(--cadd-orange); cursor:pointer;
+    }
+    .fb-rating-val {
+      min-width:42px; text-align:center; font-family:'Rajdhani',sans-serif; font-size:18px;
+      font-weight:700; color:var(--cadd-orange); background:rgba(244,121,32,0.1);
+      border-radius:8px; padding:4px 0;
+    }
+    .fb-comment-box {
+      width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--cadd-border);
+      border-radius:10px; color:var(--text-primary); padding:12px; font-size:13px;
+      font-family:'Inter',sans-serif; resize:vertical; outline:none;
+    }
+    .fb-comment-box:focus { border-color:var(--cadd-orange); }
+    .fb-char-count { text-align:right; font-size:11px; color:var(--text-muted); margin-top:4px; }
+    .fb-locked-box { text-align:center; padding:10px 4px; }
+    .fb-locked-box .icon { font-size:32px; margin-bottom:8px; }
+
     @media(max-width:480px){
       .topbar img { height:34px; }
       .main { padding:14px; }
@@ -505,6 +536,63 @@
       <div class="history-header">Recent Sessions</div>
       <div id="historyList">
         <div class="history-item"><span style="color:var(--text-muted);font-size:13px">No sessions yet.</span></div>
+      </div>
+    </div>
+
+    <div class="card" id="feedbackCard" style="display:none">
+      <div class="history-header">💬 Feedback</div>
+
+      <div class="fb-locked-box" id="feedbackLockedView" style="display:none">
+        <div class="icon">🔒</div>
+        <p style="color:var(--text-secondary);font-size:13px;line-height:1.6" id="feedbackLockedText">Your next feedback opens soon.</p>
+      </div>
+
+      <div id="feedbackFormView" style="display:none">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px">Faculty: <strong id="feedbackFacultyName" style="color:var(--text-primary)">—</strong></p>
+
+        <div class="fb-rating-group">
+          <label>Technical / Course Knowledge</label>
+          <div class="fb-rating-row">
+            <input type="range" id="fbRating_technical" min="0" max="10" step="0.5" value="8"/>
+            <div class="fb-rating-val" id="fbRating_technical_val">8</div>
+          </div>
+        </div>
+        <div class="fb-rating-group">
+          <label>Doubt Solving Ability</label>
+          <div class="fb-rating-row">
+            <input type="range" id="fbRating_doubtSolving" min="0" max="10" step="0.5" value="8"/>
+            <div class="fb-rating-val" id="fbRating_doubtSolving_val">8</div>
+          </div>
+        </div>
+        <div class="fb-rating-group">
+          <label>Have You Understood All Topics Covered?</label>
+          <div class="fb-rating-row">
+            <input type="range" id="fbRating_topicsUnderstood" min="0" max="10" step="0.5" value="8"/>
+            <div class="fb-rating-val" id="fbRating_topicsUnderstood_val">8</div>
+          </div>
+        </div>
+        <div class="fb-rating-group">
+          <label>Teaching Pace & Clarity</label>
+          <div class="fb-rating-row">
+            <input type="range" id="fbRating_paceClarity" min="0" max="10" step="0.5" value="8"/>
+            <div class="fb-rating-val" id="fbRating_paceClarity_val">8</div>
+          </div>
+        </div>
+        <div class="fb-rating-group">
+          <label>Overall Faculty Rating</label>
+          <div class="fb-rating-row">
+            <input type="range" id="fbRating_overall" min="0" max="10" step="0.5" value="8"/>
+            <div class="fb-rating-val" id="fbRating_overall_val">8</div>
+          </div>
+        </div>
+
+        <div class="fb-rating-group">
+          <label>Feedback and Scope of Improvement</label>
+          <textarea class="fb-comment-box" id="fbComment" maxlength="500" rows="4" placeholder="Share your thoughts — what's working, what could be better…"></textarea>
+          <div class="fb-char-count"><span id="fbCommentCount">0</span>/500</div>
+        </div>
+
+        <button class="btn-primary" id="fbSubmitBtn" onclick="submitFeedback()">Submit Feedback</button>
       </div>
     </div>
 
@@ -986,8 +1074,144 @@ async function loadDashboard() {
   await loadStats();
   await loadCalendarLog();
   await checkActiveSession();
+  await loadFeedbackSection();
   startClock();
 }
+
+// ── FEEDBACK ──
+// Checkpoints: Day 30 (first), Day 60, Day 90, then every 60 days after that (150, 210, 270…).
+// Nothing about "is feedback due" is ever stored as a status — it's computed live every time
+// from trackingStartDate + which checkpoints this student has already submitted for, same
+// philosophy as the validity system. admin can force-unlock a student early via
+// feedbackForceUnlock on their doc; that flag auto-clears the moment they submit.
+function getFeedbackCheckpoints(daysSince) {
+  const checkpoints = [];
+  if (daysSince >= 30) checkpoints.push(30);
+  if (daysSince >= 60) checkpoints.push(60);
+  if (daysSince >= 90) checkpoints.push(90);
+  let next = 150;
+  while (daysSince >= next) { checkpoints.push(next); next += 60; }
+  return checkpoints;
+}
+function getNextFeedbackCheckpoint(daysSince) {
+  if (daysSince < 30) return 30;
+  if (daysSince < 60) return 60;
+  if (daysSince < 90) return 90;
+  let next = 150;
+  while (daysSince >= next) next += 60;
+  return next;
+}
+
+const FB_RATING_IDS = ['technical','doubtSolving','topicsUnderstood','paceClarity','overall'];
+FB_RATING_IDS.forEach(id => {
+  const el = document.getElementById('fbRating_' + id);
+  if (el) el.addEventListener('input', () => {
+    document.getElementById('fbRating_' + id + '_val').textContent = el.value;
+  });
+});
+const fbCommentEl = document.getElementById('fbComment');
+if (fbCommentEl) fbCommentEl.addEventListener('input', () => {
+  document.getElementById('fbCommentCount').textContent = fbCommentEl.value.length;
+});
+
+function getDefaultFeedbackFacultyId(modules) {
+  for (const modId in (modules || {})) {
+    const mod = modules[modId];
+    if (!mod.facultyAssignments || !mod.facultyAssignments.length) continue;
+    const total = mod.totalSessions || Object.keys(mod.sessions || {}).length;
+    let currentSession = 1;
+    for (let n = 1; n <= total; n++) {
+      if (mod.sessions[n] && mod.sessions[n].approved) currentSession = n + 1;
+    }
+    const assignment = mod.facultyAssignments.find(fa => currentSession >= fa.fromSession && currentSession <= fa.toSession) || mod.facultyAssignments[0];
+    if (assignment && assignment.facultyId) return assignment.facultyId;
+  }
+  return null;
+}
+
+let fbCurrentCheckpoint = null;
+let fbCurrentFacultyId = null;
+let fbCurrentFacultyName = '—';
+
+async function loadFeedbackSection() {
+  const card = document.getElementById('feedbackCard');
+  const s = currentStudent;
+  if (!s || !s.trackingStartDate) { card.style.display = 'none'; return; } // no tracking start set yet — nothing to base checkpoints on
+  card.style.display = 'block';
+
+  const daysSince = Math.floor((Date.now() - s.trackingStartDate.seconds * 1000) / 86400000);
+  const checkpoints = getFeedbackCheckpoints(daysSince);
+  const dueCheckpoint = checkpoints.length ? checkpoints[checkpoints.length - 1] : null;
+
+  // Single equality query (no composite index needed) — which checkpoints has this
+  // student already submitted feedback for.
+  const q = query(collection(db, 'cadd_feedback'), where('studentDocId', '==', s.docId));
+  const snap = await getDocs(q);
+  const submittedCheckpoints = snap.docs.map(d => d.data().checkpointDay);
+
+  const naturallyDue = dueCheckpoint !== null && !submittedCheckpoints.includes(dueCheckpoint);
+  const nextCheckpointDay = getNextFeedbackCheckpoint(daysSince);
+  const forced = !!s.feedbackForceUnlock;
+
+  if (naturallyDue || forced) {
+    fbCurrentCheckpoint = naturallyDue ? dueCheckpoint : nextCheckpointDay;
+    fbCurrentFacultyId = getDefaultFeedbackFacultyId(s.modules);
+    fbCurrentFacultyName = '—';
+    if (fbCurrentFacultyId) {
+      try {
+        const facSnap = await getDoc(doc(db, 'cadd_faculty', fbCurrentFacultyId));
+        if (facSnap.exists()) fbCurrentFacultyName = facSnap.data().name || '—';
+      } catch(e) { /* leave as — */ }
+    }
+    document.getElementById('feedbackFacultyName').textContent = fbCurrentFacultyName;
+    document.getElementById('feedbackLockedView').style.display = 'none';
+    document.getElementById('feedbackFormView').style.display = 'block';
+  } else {
+    const daysUntil = Math.max(0, nextCheckpointDay - daysSince);
+    document.getElementById('feedbackLockedText').textContent =
+      `Your next feedback opens in ${daysUntil} day${daysUntil===1?'':'s'} (Day ${nextCheckpointDay}).`;
+    document.getElementById('feedbackLockedView').style.display = 'block';
+    document.getElementById('feedbackFormView').style.display = 'none';
+  }
+}
+
+async function submitFeedback() {
+  const btn = document.getElementById('fbSubmitBtn');
+  const comment = document.getElementById('fbComment').value.trim();
+  const ratings = {};
+  FB_RATING_IDS.forEach(id => { ratings[id] = parseFloat(document.getElementById('fbRating_' + id).value); });
+
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    await addDoc(collection(db, 'cadd_feedback'), {
+      studentDocId: currentStudent.docId,
+      studentName: currentStudent.name,
+      studentIdDisplay: currentStudent.studentId,
+      course: currentStudent.course || '',
+      facultyDocId: fbCurrentFacultyId,
+      facultyName: fbCurrentFacultyName,
+      checkpointDay: fbCurrentCheckpoint,
+      ratings,
+      comment,
+      visibleToFaculty: false, // admin turns this on per-student when they choose to
+      submittedAt: Timestamp.now()
+    });
+    // Auto-clear a manual force-unlock the moment they use it, so it doesn't stay open forever
+    if (currentStudent.feedbackForceUnlock) {
+      await updateDoc(doc(db, 'cadd_students', currentStudent.docId), { feedbackForceUnlock: false });
+      currentStudent.feedbackForceUnlock = false;
+    }
+    document.getElementById('fbComment').value = '';
+    document.getElementById('fbCommentCount').textContent = '0';
+    showToast('Thanks for your feedback! 🙏', 'success');
+    await loadFeedbackSection();
+  } catch(e) {
+    showToast('Error submitting feedback: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit Feedback';
+  }
+}
+window.submitFeedback = submitFeedback;
 
 // ── SYLLABUS SECTION ──
 function renderSyllabusSection(modules) {
