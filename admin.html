@@ -253,6 +253,7 @@
     <div class="nav-item" data-page="students" onclick="showPage('students')"><span class="icon">👤</span> All Students</div>
     <div class="nav-item" data-page="validity" onclick="showPage('validity')"><span class="icon">📅</span> Validity</div>
     <div class="nav-item" data-page="feedback" onclick="showPage('feedback')"><span class="icon">💬</span> Feedback</div>
+    <div class="nav-item" data-page="leaveRequests" onclick="showPage('leaveRequests')"><span class="icon">🌴</span> Leave Requests</div>
     <div class="nav-item" data-page="addStudent" onclick="showPage('addStudent')"><span class="icon">➕</span> Add Student</div>
     <div class="nav-section">Faculty</div>
     <div class="nav-item" data-page="facultyAccounts" onclick="showPage('facultyAccounts')"><span class="icon">🧑‍🏫</span> Faculty Accounts</div>
@@ -407,6 +408,7 @@
         </p>
         <div class="search-row">
           <input type="text" id="fbStatusSearch" placeholder="Search by student name or ID…" oninput="renderFeedbackStatus()"/>
+          <button class="btn btn-orange btn-sm" onclick="bulkForceUnlockAllFeedback()" title="One-time: force-unlock feedback for every currently-locked student, useful while testing">🔓 Force Unlock All (Locked Students)</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -414,6 +416,28 @@
             <tbody id="feedbackStatusTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- LEAVE REQUESTS -->
+    <div class="page" id="page-leaveRequests">
+      <div class="page-header">
+        <h1>🌴 Leave Requests</h1>
+      </div>
+      <div class="search-row">
+        <input type="text" id="lrSearch" placeholder="Search by student name…" oninput="renderLeaveRequests()"/>
+        <select id="lrStatusFilter" onchange="renderLeaveRequests()">
+          <option value="pending">⏳ Pending</option>
+          <option value="">All</option>
+          <option value="approved">✅ Approved</option>
+          <option value="rejected">❌ Rejected</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Requested</th><th>Student</th><th>Course</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="leaveRequestsTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
 
@@ -1791,6 +1815,41 @@ function renderFeedbackStatus() {
 }
 window.renderFeedbackStatus = renderFeedbackStatus;
 
+// One-time helper (mainly for testing / early rollout): force-unlocks feedback for every
+// student who is currently locked, in one click, instead of clicking "Force Unlock" on
+// each row individually. Each student's flag still auto-clears the moment THEY submit —
+// this is just a bulk way to flip the same per-student switch that forceUnlockFeedback() does.
+async function bulkForceUnlockAllFeedback() {
+  const toUnlock = allStudents.filter(s => {
+    if (s.feedbackForceUnlock) return false; // already force-unlocked
+    if (!s.trackingStartDate) return true; // no App Start Date — treat as locked/needs a nudge too
+    const daysSince = Math.floor((Date.now() - s.trackingStartDate.seconds*1000) / 86400000);
+    const checkpoints = getFeedbackCheckpoints(daysSince);
+    const dueCheckpoint = checkpoints.length ? checkpoints[checkpoints.length-1] : null;
+    const submitted = allFeedback.filter(f => f.studentDocId === s.docId).map(f => f.checkpointDay);
+    const naturallyDue = dueCheckpoint !== null && !submitted.includes(dueCheckpoint);
+    return !naturallyDue; // only the ones that are actually locked right now
+  });
+  if (!toUnlock.length) {
+    showToast('No locked students to unlock — everyone is already due or force-unlocked.', 'success');
+    return;
+  }
+  if (!confirm(`Force-unlock feedback for ${toUnlock.length} currently-locked student(s)?`)) return;
+
+  showToast(`Unlocking ${toUnlock.length} student(s)…`, '');
+  let done = 0, failed = 0;
+  for (const s of toUnlock) {
+    try {
+      await updateDoc(doc(db,'cadd_students', s.docId), { feedbackForceUnlock: true });
+      s.feedbackForceUnlock = true;
+      done++;
+    } catch(e) { failed++; }
+  }
+  showToast(`Done — ${done} student(s) unlocked${failed ? `, ${failed} failed` : ''}.`, failed ? 'error' : 'success');
+  renderFeedbackStatus();
+}
+window.bulkForceUnlockAllFeedback = bulkForceUnlockAllFeedback;
+
 async function forceUnlockFeedback(studentDocId) {
   try {
     await updateDoc(doc(db,'cadd_students',studentDocId), { feedbackForceUnlock: true });
@@ -1812,6 +1871,92 @@ async function cancelForceUnlockFeedback(studentDocId) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.cancelForceUnlockFeedback = cancelForceUnlockFeedback;
+
+// ── LEAVE REQUESTS ──
+let allLeaveRequests = [];
+
+async function loadLeaveRequests() {
+  try {
+    const snap = await getDocs(query(collection(db,'cadd_leave_requests'), orderBy('requestedAt','desc')));
+    allLeaveRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderLeaveRequests();
+  } catch(e) {
+    console.error('Load leave requests error:', e);
+    document.getElementById('leaveRequestsTable').innerHTML = `<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Error loading: ${e.message}</td></tr>`;
+  }
+}
+window.loadLeaveRequests = loadLeaveRequests;
+
+function renderLeaveRequests() {
+  const tb = document.getElementById('leaveRequestsTable');
+  const search = (document.getElementById('lrSearch').value || '').toLowerCase();
+  const statusFilter = document.getElementById('lrStatusFilter').value;
+
+  const list = allLeaveRequests.filter(r => {
+    if (search && !(r.studentName||'').toLowerCase().includes(search)) return false;
+    if (statusFilter && r.status !== statusFilter) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No leave requests found.</td></tr>';
+    return;
+  }
+
+  tb.innerHTML = '';
+  list.forEach(r => {
+    const dateLabel = r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+    let statusHtml, actionsHtml = '—';
+    if (r.status === 'pending') {
+      statusHtml = `<span style="color:#F0C040;font-weight:600">⏳ Pending</span>`;
+      actionsHtml = `
+        <button class="btn btn-green btn-sm" onclick="approveLeaveRequest('${r.id}','${r.studentDocId}')">✅ Approve</button>
+        <button class="btn btn-red btn-sm" onclick="rejectLeaveRequest('${r.id}')">✕ Reject</button>`;
+    } else if (r.status === 'approved') {
+      statusHtml = `<span style="color:var(--green);font-weight:600">✅ Approved</span>`;
+    } else {
+      statusHtml = `<span style="color:var(--red);font-weight:600">❌ Rejected</span>`;
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-size:12px">${dateLabel}</td>
+      <td>${r.studentName||'—'}</td>
+      <td style="font-size:12px;color:var(--text2)">${r.course||'—'}</td>
+      <td style="max-width:260px;white-space:normal;font-size:12px;color:var(--text2)">${(r.reason||'').replace(/</g,'&lt;')}</td>
+      <td style="font-size:12px">${statusHtml}</td>
+      <td style="display:flex;gap:6px">${actionsHtml}</td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderLeaveRequests = renderLeaveRequests;
+
+async function approveLeaveRequest(requestId, studentDocId) {
+  if (!confirm('Approve this leave request? The student\'s status will be set to "On Leave".')) return;
+  try {
+    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'approved', reviewedAt: Timestamp.now() });
+    await updateDoc(doc(db,'cadd_students',studentDocId), { status: 'on_leave' });
+    const r = allLeaveRequests.find(x => x.id === requestId);
+    if (r) { r.status = 'approved'; r.reviewedAt = Timestamp.now(); }
+    const s = allStudents.find(x => x.docId === studentDocId);
+    if (s) s.status = 'on_leave';
+    showToast('Leave approved — student marked "On Leave"', 'success');
+    renderLeaveRequests();
+    filterStudents();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.approveLeaveRequest = approveLeaveRequest;
+
+async function rejectLeaveRequest(requestId) {
+  if (!confirm('Reject this leave request?')) return;
+  try {
+    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'rejected', reviewedAt: Timestamp.now() });
+    const r = allLeaveRequests.find(x => x.id === requestId);
+    if (r) { r.status = 'rejected'; r.reviewedAt = Timestamp.now(); }
+    showToast('Leave request rejected', 'success');
+    renderLeaveRequests();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.rejectLeaveRequest = rejectLeaveRequest;
 
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
@@ -2800,6 +2945,7 @@ function showPage(id) {
   if(id==='facultyAccounts') loadFacultyAccounts();
   if(id==='validity') renderValidityPanel();
   if(id==='feedback') loadFeedback();
+  if(id==='leaveRequests') loadLeaveRequests();
 }
 
 function switchTab(tab) {
