@@ -373,6 +373,12 @@
     .fb-locked-box { text-align:center; padding:10px 4px; }
     .fb-locked-box .icon { font-size:32px; margin-bottom:8px; }
 
+    /* Leave Request */
+    .leave-modal { background:var(--cadd-dark); border:1px solid var(--cadd-border); border-radius:16px; width:100%; max-width:380px; padding:24px; text-align:left; }
+    .leave-modal h3 { font-family:'Rajdhani',sans-serif; font-size:19px; font-weight:700; margin-bottom:6px; }
+    .leave-modal p { font-size:12px; color:var(--text-muted); line-height:1.5; margin-bottom:14px; }
+    .btn-ghost-full { width:100%; background:rgba(255,255,255,0.06); border:1px solid var(--cadd-border); color:var(--text-secondary); border-radius:10px; padding:12px; font-size:14px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer; }
+
     @media(max-width:480px){
       .topbar img { height:34px; }
       .main { padding:14px; }
@@ -596,9 +602,31 @@
       </div>
     </div>
 
+    <div class="card" id="leaveRequestCard">
+      <div class="history-header">🌴 Leave Request</div>
+      <div id="leaveRequestStatus" style="display:none">
+        <p style="color:var(--text-secondary);font-size:13px;line-height:1.6" id="leaveRequestStatusText"></p>
+      </div>
+      <button class="btn-ghost-full" id="leaveRequestBtn" onclick="openLeaveRequestModal()" style="display:none">Request Leave</button>
+    </div>
+
     <button class="btn-signout" onclick="doLogout()">Sign Out</button>
   </div>
 
+</div>
+
+<!-- LEAVE REQUEST MODAL -->
+<div class="install-modal-overlay" id="leaveRequestModalOverlay">
+  <div class="leave-modal">
+    <h3>Request Leave</h3>
+    <p>Let the institute know why you'll be away. Admin will review this and update your status.</p>
+    <textarea class="fb-comment-box" id="leaveReasonInput" rows="4" maxlength="500" placeholder="Reason for leave…"></textarea>
+    <div class="fb-char-count"><span id="leaveReasonCount">0</span>/500</div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="btn-ghost-full" onclick="closeLeaveRequestModal()">Cancel</button>
+      <button class="btn-primary" id="leaveSubmitBtn" onclick="submitLeaveRequest()">Submit</button>
+    </div>
+  </div>
 </div>
 
 <!-- INSTALL MODAL -->
@@ -1075,6 +1103,7 @@ async function loadDashboard() {
   await loadCalendarLog();
   await checkActiveSession();
   await loadFeedbackSection();
+  await loadLeaveRequestStatus();
   startClock();
 }
 
@@ -1212,6 +1241,89 @@ async function submitFeedback() {
   }
 }
 window.submitFeedback = submitFeedback;
+
+// ── LEAVE REQUEST ──
+const leaveReasonEl = document.getElementById('leaveReasonInput');
+if (leaveReasonEl) leaveReasonEl.addEventListener('input', () => {
+  document.getElementById('leaveReasonCount').textContent = leaveReasonEl.value.length;
+});
+
+function openLeaveRequestModal() {
+  document.getElementById('leaveReasonInput').value = '';
+  document.getElementById('leaveReasonCount').textContent = '0';
+  document.getElementById('leaveRequestModalOverlay').classList.add('show');
+}
+window.openLeaveRequestModal = openLeaveRequestModal;
+
+function closeLeaveRequestModal() {
+  document.getElementById('leaveRequestModalOverlay').classList.remove('show');
+}
+window.closeLeaveRequestModal = closeLeaveRequestModal;
+
+async function submitLeaveRequest() {
+  const reason = document.getElementById('leaveReasonInput').value.trim();
+  if (!reason) { showToast('Please add a reason for your leave', 'error'); return; }
+  const btn = document.getElementById('leaveSubmitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    await addDoc(collection(db, 'cadd_leave_requests'), {
+      studentDocId: currentStudent.docId,
+      studentName: currentStudent.name,
+      studentIdDisplay: currentStudent.studentId,
+      course: currentStudent.course || '',
+      reason,
+      status: 'pending',
+      requestedAt: Timestamp.now(),
+      reviewedAt: null
+    });
+    closeLeaveRequestModal();
+    showToast('Leave request submitted — admin will review it', 'success');
+    await loadLeaveRequestStatus();
+  } catch(e) {
+    showToast('Error submitting request: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Submit';
+  }
+}
+window.submitLeaveRequest = submitLeaveRequest;
+
+async function loadLeaveRequestStatus() {
+  try {
+    // Single equality query (no composite index needed) — sort client-side.
+    const q = query(collection(db, 'cadd_leave_requests'), where('studentDocId', '==', currentStudent.docId));
+    const snap = await getDocs(q);
+    const requests = snap.docs.map(d => d.data()).sort((a,b) => b.requestedAt.seconds - a.requestedAt.seconds);
+    const latest = requests[0];
+    const statusBox = document.getElementById('leaveRequestStatus');
+    const statusText = document.getElementById('leaveRequestStatusText');
+    const btn = document.getElementById('leaveRequestBtn');
+
+    if (latest && latest.status === 'pending') {
+      const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+      statusText.textContent = `⏳ Your leave request from ${d} is pending admin review.`;
+      statusBox.style.display = 'block';
+      btn.style.display = 'none';
+    } else {
+      if (latest && (latest.status === 'approved' || latest.status === 'rejected')) {
+        const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+        statusText.textContent = latest.status === 'approved'
+          ? `✅ Your last leave request (${d}) was approved.`
+          : `Your last leave request (${d}) was not approved.`;
+        statusBox.style.display = 'block';
+      } else {
+        statusBox.style.display = 'none';
+      }
+      btn.style.display = 'block';
+    }
+  } catch(e) {
+    console.error('Leave request status error:', e);
+  }
+}
+window.loadLeaveRequestStatus = loadLeaveRequestStatus;
+
+document.getElementById('leaveRequestModalOverlay')?.addEventListener('click', (e) => {
+  if (e.target.id === 'leaveRequestModalOverlay') closeLeaveRequestModal();
+});
 
 // ── SYLLABUS SECTION ──
 function renderSyllabusSection(modules) {
