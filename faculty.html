@@ -221,6 +221,7 @@
     <button class="tab-btn" id="tab-students" onclick="switchFacTab('students')">👤 My Students</button>
     <button class="tab-btn" id="tab-live" onclick="switchFacTab('live')">🟢 Live Now</button>
     <button class="tab-btn" id="tab-attlog" onclick="switchFacTab('attlog')">📅 Attendance Log</button>
+    <button class="tab-btn" id="tab-feedback" onclick="switchFacTab('feedback')">💬 Feedback</button>
   </div>
 
   <!-- ATTENDANCE LOG TAB (this faculty's own students only) -->
@@ -238,6 +239,14 @@
         <tbody id="facAttTable"><tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- FEEDBACK TAB (only shows feedback for students the admin has made visible to faculty) -->
+  <div id="facTabFeedback" style="display:none">
+    <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+      Only shows feedback the admin has chosen to make visible to you, for your own students.
+    </p>
+    <div id="feedbackFacList"></div>
   </div>
 
 
@@ -592,12 +601,15 @@ function switchFacTab(tab) {
   document.getElementById('facTabStudents').style.display = tab === 'students' ? 'block' : 'none';
   document.getElementById('facTabLive').style.display = tab === 'live' ? 'block' : 'none';
   document.getElementById('facTabAttlog').style.display = tab === 'attlog' ? 'block' : 'none';
+  document.getElementById('facTabFeedback').style.display = tab === 'feedback' ? 'block' : 'none';
   document.getElementById('tab-pending').classList.toggle('active', tab === 'pending');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
   document.getElementById('tab-live').classList.toggle('active', tab === 'live');
   document.getElementById('tab-attlog').classList.toggle('active', tab === 'attlog');
+  document.getElementById('tab-feedback').classList.toggle('active', tab === 'feedback');
   if (tab === 'live') loadLiveSlots();
   if (tab === 'attlog') loadFacAttendance();
+  if (tab === 'feedback') loadFacFeedback();
 }
 
 // ── ATTENDANCE LOG (faculty's own students only) ──
@@ -607,6 +619,60 @@ function switchFacTab(tab) {
 // The actual fetch happens once in fetchFacAttendance() (called at login, so the
 // Streak column has data ready immediately) — this tab just re-renders that same
 // data, no extra Firestore reads spent switching tabs.
+// ── FEEDBACK (only students admin has made visible to this faculty) ──
+// Single field orderBy query (no where clause, no composite index needed) — visibility
+// ("is this student's feedback shown to me") and ownership ("is this my student") are
+// both filtered client-side, same pattern as everywhere else in this file.
+async function loadFacFeedback() {
+  const wrap = document.getElementById('feedbackFacList');
+  wrap.innerHTML = '<p style="color:var(--text3)">Loading…</p>';
+  try {
+    const visibleDocIds = new Set(myStudents.filter(s => s.feedbackVisibleToFaculty).map(s => s.docId));
+    if (!visibleDocIds.size) {
+      wrap.innerHTML = '<div class="empty-state"><div class="icon">💬</div>No feedback has been made visible to you yet.</div>';
+      return;
+    }
+    const snap = await getDocs(query(collection(db, 'cadd_feedback'), orderBy('submittedAt', 'desc')));
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(f => visibleDocIds.has(f.studentDocId));
+    if (!list.length) {
+      wrap.innerHTML = '<div class="empty-state"><div class="icon">💬</div>No feedback submissions yet for your visible students.</div>';
+      return;
+    }
+    wrap.innerHTML = '';
+    list.forEach(f => {
+      const r = f.ratings || {};
+      const vals = Object.values(r);
+      const avg = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : '—';
+      const dateLabel = f.submittedAt ? new Date(f.submittedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.marginBottom = '12px';
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-size:14px;font-weight:600">${f.studentName||'—'}</div>
+            <div style="font-size:11px;color:var(--text3)">${dateLabel} · Checkpoint Day ${f.checkpointDay||'—'}</div>
+          </div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--orange)">${avg}<span style="font-size:12px;color:var(--text3)">/10</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;font-size:12px;color:var(--text2);margin-bottom:10px">
+          <div>Technical: <strong style="color:#fff">${r.technical ?? '—'}</strong></div>
+          <div>Doubt Solving: <strong style="color:#fff">${r.doubtSolving ?? '—'}</strong></div>
+          <div>Topics Understood: <strong style="color:#fff">${r.topicsUnderstood ?? '—'}</strong></div>
+          <div>Pace & Clarity: <strong style="color:#fff">${r.paceClarity ?? '—'}</strong></div>
+          <div>Overall: <strong style="color:#fff">${r.overall ?? '—'}</strong></div>
+        </div>
+        ${f.comment ? `<div style="font-size:12px;color:var(--text2);background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;border:1px solid var(--border)">"${f.comment.replace(/</g,'&lt;')}"</div>` : ''}
+      `;
+      wrap.appendChild(div);
+    });
+  } catch(e) {
+    console.error('Feedback load error:', e);
+    wrap.innerHTML = `<p style="color:var(--red)">Error loading feedback: ${e.message}</p>`;
+  }
+}
+window.loadFacFeedback = loadFacFeedback;
+
 async function fetchFacAttendance() {
   try {
     const myDocIds = new Set(myStudents.map(s => s.docId));
