@@ -604,6 +604,18 @@
 </div>
 
 <!-- FACULTY MODAL (Add / Edit) -->
+<div class="modal-overlay" id="commentViewModal" style="display:none">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 id="commentViewTitle">Feedback Comment</h3>
+      <button class="modal-close" onclick="closeModal('commentViewModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="commentViewText" style="font-size:13px;line-height:1.7;color:var(--text2);white-space:pre-wrap"></p>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="facultyModal" style="display:none">
   <div class="modal">
     <div class="modal-header">
@@ -1738,7 +1750,7 @@ function renderFeedbackSubmissions() {
       <td>${r.paceClarity ?? '—'}</td>
       <td>${r.overall ?? '—'}</td>
       <td style="color:${avgColor};font-weight:700">${avg}</td>
-      <td style="max-width:220px;white-space:normal;font-size:12px;color:var(--text2)">${f.comment ? f.comment.replace(/</g,'&lt;') : '<span style="color:var(--text3)">—</span>'}</td>
+      <td style="max-width:160px">${f.comment ? `<span onclick='viewFullComment(${JSON.stringify(f.studentName||"")}, ${JSON.stringify(f.comment)})' style="cursor:pointer;color:var(--orange);font-size:12px;text-decoration:underline;text-underline-offset:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:160px" title="Click to read full comment">💬 ${f.comment.replace(/</g,'&lt;')}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
       <td>
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;color:var(--text2)">
           <input type="checkbox" ${visible?'checked':''} onchange="toggleFacultyVisibility('${f.studentDocId}', this.checked)"/> ${visible?'Visible':'Hidden'}
@@ -2956,6 +2968,13 @@ function switchTab(tab) {
   document.getElementById('tab-syllabus').className='btn btn-'+(tab==='syllabus'?'orange':'ghost')+' btn-sm';
   document.getElementById('tab-att').className='btn btn-'+(tab==='att'?'orange':'ghost')+' btn-sm';
 }
+
+function viewFullComment(studentName, text) {
+  document.getElementById('commentViewTitle').textContent = studentName ? `${studentName} — Comment` : 'Feedback Comment';
+  document.getElementById('commentViewText').textContent = text || '(no comment left)';
+  document.getElementById('commentViewModal').style.display = 'flex';
+}
+window.viewFullComment = viewFullComment;
 
 function closeModal(id) { document.getElementById(id).style.display='none'; }
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; }));
