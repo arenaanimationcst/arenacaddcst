@@ -321,6 +321,27 @@
     .h-hrs { font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; color:var(--success); }
     .h-hrs.auto { color:var(--warning); }
 
+    /* Student portal top tabs */
+    .student-tabs {
+      display:flex; gap:6px; margin-bottom:16px; position:sticky; top:0; z-index:50;
+      background:var(--cadd-darker); padding:10px 0 6px;
+    }
+    .student-tab-btn {
+      flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--cadd-border);
+      color:var(--text-secondary); border-radius:10px; padding:10px 8px; font-size:12px;
+      font-weight:600; font-family:'Inter',sans-serif; cursor:pointer; transition:all 0.15s;
+      display:flex; flex-direction:column; align-items:center; gap:2px; position:relative;
+    }
+    .student-tab-btn .st-tab-icon { font-size:17px; }
+    .student-tab-btn.active {
+      background:rgba(244,121,32,0.12); border-color:var(--cadd-orange); color:var(--cadd-orange);
+    }
+    .student-tab-btn .st-tab-dot {
+      width:8px; height:8px; border-radius:50%; background:var(--danger); position:absolute;
+      top:6px; right:10px; display:none; box-shadow:0 0 0 2px var(--cadd-darker);
+    }
+    .student-tab-btn .st-tab-dot.show { display:block; }
+
     .btn-signout {
       background:none; border:1px solid var(--cadd-border);
       color:var(--text-muted); font-size:12px; border-radius:8px;
@@ -446,6 +467,21 @@
       <div class="badge active" id="statusBadge">Active</div>
     </div>
 
+    <div class="student-tabs">
+      <button class="student-tab-btn active" id="stTab-attendance" onclick="switchStudentTab('attendance')">
+        <span class="st-tab-icon">🏠</span> Attendance
+      </button>
+      <button class="student-tab-btn" id="stTab-feedback" onclick="switchStudentTab('feedback')">
+        <span class="st-tab-dot" id="stDot-feedback"></span>
+        <span class="st-tab-icon">💬</span> Feedback
+      </button>
+      <button class="student-tab-btn" id="stTab-leave" onclick="switchStudentTab('leave')">
+        <span class="st-tab-icon">🌴</span> Leave
+      </button>
+    </div>
+
+    <div id="stPanelAttendance">
+
     <div class="leave-banner" id="leaveBanner" style="display:none">
       <span style="font-size:20px">🏖️</span>
       <p>You are currently <strong>On Leave</strong>. Attendance marking is disabled. Contact your faculty or admin to resume.</p>
@@ -545,6 +581,10 @@
       </div>
     </div>
 
+    </div><!-- /stPanelAttendance -->
+
+    <div id="stPanelFeedback" style="display:none">
+
     <div class="card" id="feedbackCard" style="display:none">
       <div class="history-header">💬 Feedback</div>
 
@@ -602,6 +642,10 @@
       </div>
     </div>
 
+    </div><!-- /stPanelFeedback -->
+
+    <div id="stPanelLeave" style="display:none">
+
     <div class="card" id="leaveRequestCard">
       <div class="history-header">🌴 Leave Request</div>
       <div id="leaveRequestStatus" style="display:none">
@@ -609,6 +653,8 @@
       </div>
       <button class="btn-ghost-full" id="leaveRequestBtn" onclick="openLeaveRequestModal()" style="display:none">Request Leave</button>
     </div>
+
+    </div><!-- /stPanelLeave -->
 
     <button class="btn-signout" onclick="doLogout()">Sign Out</button>
   </div>
@@ -1195,12 +1241,14 @@ async function loadFeedbackSection() {
     document.getElementById('feedbackFacultyName').textContent = fbCurrentFacultyName;
     document.getElementById('feedbackLockedView').style.display = 'none';
     document.getElementById('feedbackFormView').style.display = 'block';
+    document.getElementById('stDot-feedback')?.classList.add('show');
   } else {
     const daysUntil = Math.max(0, nextCheckpointDay - daysSince);
     document.getElementById('feedbackLockedText').textContent =
       `Your next feedback opens in ${daysUntil} day${daysUntil===1?'':'s'} (Day ${nextCheckpointDay}).`;
     document.getElementById('feedbackLockedView').style.display = 'block';
     document.getElementById('feedbackFormView').style.display = 'none';
+    document.getElementById('stDot-feedback')?.classList.remove('show');
   }
 }
 
@@ -1320,6 +1368,18 @@ async function loadLeaveRequestStatus() {
   }
 }
 window.loadLeaveRequestStatus = loadLeaveRequestStatus;
+
+// ── TOP TABS ──
+function switchStudentTab(tab) {
+  document.getElementById('stPanelAttendance').style.display = tab === 'attendance' ? 'block' : 'none';
+  document.getElementById('stPanelFeedback').style.display = tab === 'feedback' ? 'block' : 'none';
+  document.getElementById('stPanelLeave').style.display = tab === 'leave' ? 'block' : 'none';
+  document.getElementById('stTab-attendance').classList.toggle('active', tab === 'attendance');
+  document.getElementById('stTab-feedback').classList.toggle('active', tab === 'feedback');
+  document.getElementById('stTab-leave').classList.toggle('active', tab === 'leave');
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+window.switchStudentTab = switchStudentTab;
 
 document.getElementById('leaveRequestModalOverlay')?.addEventListener('click', (e) => {
   if (e.target.id === 'leaveRequestModalOverlay') closeLeaveRequestModal();
