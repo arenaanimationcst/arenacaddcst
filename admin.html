@@ -98,6 +98,9 @@
     .badge.leave{background:rgba(240,192,64,0.15);color:var(--yellow);border:1px solid rgba(240,192,64,0.3);}
     .badge.deactivated{background:rgba(224,92,106,0.15);color:var(--red);border:1px solid rgba(224,92,106,0.3);}
     .badge.completed{background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3);}
+    .badge.sd-present{background:rgba(76,175,130,0.15);color:var(--green);border:1px solid rgba(76,175,130,0.3);}
+    .badge.sd-left{background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3);}
+    .badge.sd-absent{background:rgba(224,92,106,0.15);color:var(--red);border:1px solid rgba(224,92,106,0.3);}
 
     /* MODAL */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -176,10 +179,18 @@
 
     /* LIVE SLOTS */
     .slots-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
-    .slot-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;}
+    .slot-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color 0.15s,transform 0.15s;}
+    .slot-card:hover{border-color:var(--orange);transform:translateY(-2px);}
+    .slot-card.selected{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange);}
     .slot-card .sname{font-size:14px;font-weight:600;margin-bottom:4px;}
     .slot-card .scount{font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--orange);}
-    .slot-card .slabel{font-size:11px;color:var(--text3);}
+    .slot-card .slabel{font-size:11px;color:var(--text3);margin-bottom:8px;}
+    .slot-card .smini{font-size:11px;color:var(--text2);display:flex;gap:10px;flex-wrap:wrap;}
+    .slot-detail-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-top:16px;}
+    .slot-detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    .slot-detail-header h3{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;}
+    .progress-mini-bar{background:rgba(255,255,255,0.08);border-radius:6px;height:6px;width:70px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:6px;}
+    .progress-mini-fill{height:100%;background:var(--orange);border-radius:6px;}
 
     /* TOAST */
     .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--dark);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none;}
@@ -278,6 +289,8 @@
         <div class="stat-card"><div class="sv green" id="ov-active">—</div><div class="sl">Active</div></div>
         <div class="stat-card"><div class="sv orange" id="ov-present">—</div><div class="sl">Present Today</div></div>
         <div class="stat-card"><div class="sv red" id="ov-leave">—</div><div class="sl">On Leave</div></div>
+        <div class="stat-card"><div class="sv" id="ov-deactivated">—</div><div class="sl">Deactivated</div></div>
+        <div class="stat-card"><div class="sv" id="ov-completed">—</div><div class="sl">🎓 Completed</div></div>
       </div>
       <div class="card">
         <div class="card-title">Today's Check-Ins</div>
@@ -294,6 +307,30 @@
     <div class="page" id="page-liveSlots">
       <div class="page-header"><h1>Live Slots</h1><button class="btn btn-ghost" onclick="loadLiveSlots()">🔄 Refresh</button></div>
       <div class="slots-grid" id="slotsGrid"><p style="color:var(--text3)">Loading…</p></div>
+
+      <div class="slot-detail-panel" id="slotDetailPanel" style="display:none">
+        <div class="slot-detail-header">
+          <h3 id="slotDetailTitle">—</h3>
+          <button class="btn btn-ghost btn-sm" onclick="closeSlotDetail()">✕ Close</button>
+        </div>
+        <div class="search-row">
+          <input type="text" id="slotDetailSearch" placeholder="Search by student name…" oninput="renderSlotDetail()"/>
+          <select id="slotDetailStatusFilter" onchange="renderSlotDetail()">
+            <option value="">All Statuses</option>
+            <option value="present">🟢 Present (Live)</option>
+            <option value="left">✅ Left for the Day</option>
+            <option value="absent">⚪ Absent</option>
+          </select>
+          <select id="slotDetailCourseFilter" onchange="renderSlotDetail()"><option value="">All Courses</option></select>
+          <select id="slotDetailFacultyFilter" onchange="renderSlotDetail()"><option value="">All Faculty</option></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Student</th><th>Course</th><th>Faculty</th><th>Progress</th><th>Status</th><th>Check In</th><th>Check Out</th></tr></thead>
+            <tbody id="slotDetailTable"><tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">Select a slot above.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ALL STUDENTS -->
@@ -374,6 +411,7 @@
       <div class="tabs" style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:10px">
         <button class="btn btn-orange btn-sm" id="fbTab-submissions" onclick="switchFeedbackTab('submissions')">📋 Submissions</button>
         <button class="btn btn-ghost btn-sm" id="fbTab-status" onclick="switchFeedbackTab('status')">🔓 Student Status</button>
+        <button class="btn btn-ghost btn-sm" id="fbTab-ratings" onclick="switchFeedbackTab('ratings')">📊 Faculty Ratings</button>
       </div>
 
       <!-- SUBMISSIONS -->
@@ -394,7 +432,7 @@
             <thead><tr>
               <th>Date</th><th>Student</th><th>Faculty</th><th>Checkpoint</th>
               <th>Technical</th><th>Doubt Solving</th><th>Topics</th><th>Pace</th><th>Overall</th><th>Avg</th>
-              <th>Comment</th><th>Faculty View</th>
+              <th>How can we improve?</th><th>Faculty View</th>
             </tr></thead>
             <tbody id="feedbackSubmissionsTable"><tr><td colspan="12" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
           </table>
@@ -417,7 +455,39 @@
           </table>
         </div>
       </div>
+
+      <!-- FACULTY RATINGS -->
+      <div id="feedbackRatingsView" style="display:none">
+        <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+          Shown as <strong>averages, not totals</strong> — so a faculty with more students isn't unfairly compared against one with fewer. Submission count is shown alongside every average so you can judge how much data it's based on.
+        </p>
+        <div class="search-row">
+          <select id="frFacultyFilter" onchange="renderFacultyRatings()"><option value="">All Faculty</option></select>
+          <input type="date" id="frDateFrom" onchange="renderFacultyRatings()" title="From date"/>
+          <input type="date" id="frDateTo" onchange="renderFacultyRatings()" title="To date"/>
+          <button class="btn btn-ghost btn-sm" onclick="clearFacultyRatingFilters()">Clear</button>
+        </div>
+        <div class="search-row">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
+            <input type="checkbox" id="frCompareToggle" onchange="toggleFacultyRatingCompare()"/> Compare against another period
+          </label>
+        </div>
+        <div class="search-row" id="frCompareRow" style="display:none">
+          <span style="font-size:12px;color:var(--text3);align-self:center">Period B:</span>
+          <input type="date" id="frDateFrom2" onchange="renderFacultyRatings()" title="Period B from date"/>
+          <input type="date" id="frDateTo2" onchange="renderFacultyRatings()" title="Period B to date"/>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr id="frTableHead">
+              <th>Faculty</th><th>Submissions</th><th>Avg Technical</th><th>Avg Doubt Solving</th><th>Avg Topics</th><th>Avg Pace</th><th>Avg Overall</th><th>Combined Avg</th>
+            </tr></thead>
+            <tbody id="facultyRatingsTable"><tr><td colspan="8" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </div>
+
 
     <!-- LEAVE REQUESTS -->
     <div class="page" id="page-leaveRequests">
@@ -607,7 +677,7 @@
 <div class="modal-overlay" id="commentViewModal" style="display:none">
   <div class="modal" style="max-width:420px">
     <div class="modal-header">
-      <h3 id="commentViewTitle">Feedback Comment</h3>
+      <h3 id="commentViewTitle">How Can We Improve?</h3>
       <button class="modal-close" onclick="closeModal('commentViewModal')">×</button>
     </div>
     <div class="modal-body">
@@ -1693,10 +1763,148 @@ function populateFeedbackFilterOptions() {
 function switchFeedbackTab(tab) {
   document.getElementById('feedbackSubmissionsView').style.display = tab==='submissions' ? 'block' : 'none';
   document.getElementById('feedbackStatusView').style.display = tab==='status' ? 'block' : 'none';
+  document.getElementById('feedbackRatingsView').style.display = tab==='ratings' ? 'block' : 'none';
   document.getElementById('fbTab-submissions').className = 'btn btn-sm ' + (tab==='submissions' ? 'btn-orange' : 'btn-ghost');
   document.getElementById('fbTab-status').className = 'btn btn-sm ' + (tab==='status' ? 'btn-orange' : 'btn-ghost');
+  document.getElementById('fbTab-ratings').className = 'btn btn-sm ' + (tab==='ratings' ? 'btn-orange' : 'btn-ghost');
+  if (tab === 'ratings') { populateFacultyRatingFilterOptions(); renderFacultyRatings(); }
 }
 window.switchFeedbackTab = switchFeedbackTab;
+
+const FEEDBACK_RATING_IDS = ['technical','doubtSolving','topicsUnderstood','paceClarity','overall'];
+
+function populateFacultyRatingFilterOptions() {
+  const sel = document.getElementById('frFacultyFilter');
+  const cur = sel.value;
+  const names = new Set(allFeedback.map(f => f.facultyName).filter(Boolean));
+  sel.innerHTML = '<option value="">All Faculty</option>' + [...names].sort().map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');
+  sel.value = cur;
+}
+window.populateFacultyRatingFilterOptions = populateFacultyRatingFilterOptions;
+
+function toggleFacultyRatingCompare() {
+  const on = document.getElementById('frCompareToggle').checked;
+  document.getElementById('frCompareRow').style.display = on ? 'flex' : 'none';
+  renderFacultyRatings();
+}
+window.toggleFacultyRatingCompare = toggleFacultyRatingCompare;
+
+function clearFacultyRatingFilters() {
+  document.getElementById('frFacultyFilter').value = '';
+  document.getElementById('frDateFrom').value = '';
+  document.getElementById('frDateTo').value = '';
+  document.getElementById('frDateFrom2').value = '';
+  document.getElementById('frDateTo2').value = '';
+  document.getElementById('frCompareToggle').checked = false;
+  document.getElementById('frCompareRow').style.display = 'none';
+  renderFacultyRatings();
+}
+window.clearFacultyRatingFilters = clearFacultyRatingFilters;
+
+// Groups feedback by faculty and returns AVERAGES (not sums/totals) for each rating
+// criterion, plus a submission count. Averages are what make comparison across faculty
+// with different batch sizes fair — a faculty with 40 students isn't penalized or boosted
+// relative to one with 12 just because of raw volume.
+function computeFacultyRatingStats(fromStr, toStr, facultyFilter) {
+  const from = fromStr ? new Date(fromStr + 'T00:00:00') : null;
+  const to = toStr ? new Date(toStr + 'T23:59:59') : null;
+  const map = {};
+  allFeedback.forEach(f => {
+    if (!f.facultyName) return;
+    if (facultyFilter && f.facultyName !== facultyFilter) return;
+    if (from || to) {
+      if (!f.submittedAt) return;
+      const d = new Date(f.submittedAt.seconds*1000);
+      if (from && d < from) return;
+      if (to && d > to) return;
+    }
+    const key = f.facultyName;
+    if (!map[key]) map[key] = { count: 0, sums: { technical:0, doubtSolving:0, topicsUnderstood:0, paceClarity:0, overall:0 }, combinedSum: 0 };
+    const r = f.ratings || {};
+    FEEDBACK_RATING_IDS.forEach(id => { map[key].sums[id] += (r[id] || 0); });
+    map[key].combinedSum += avgRating(r);
+    map[key].count++;
+  });
+  const result = {};
+  Object.keys(map).forEach(key => {
+    const m = map[key];
+    result[key] = {
+      count: m.count,
+      avg: {
+        technical: m.sums.technical/m.count,
+        doubtSolving: m.sums.doubtSolving/m.count,
+        topicsUnderstood: m.sums.topicsUnderstood/m.count,
+        paceClarity: m.sums.paceClarity/m.count,
+        overall: m.sums.overall/m.count,
+      },
+      combinedAvg: m.combinedSum/m.count
+    };
+  });
+  return result;
+}
+
+function renderFacultyRatings() {
+  const facultyFilter = document.getElementById('frFacultyFilter').value;
+  const from1 = document.getElementById('frDateFrom').value;
+  const to1 = document.getElementById('frDateTo').value;
+  const compareOn = document.getElementById('frCompareToggle').checked;
+  const from2 = document.getElementById('frDateFrom2').value;
+  const to2 = document.getElementById('frDateTo2').value;
+
+  const statsA = computeFacultyRatingStats(from1, to1, facultyFilter);
+  const statsB = compareOn ? computeFacultyRatingStats(from2, to2, facultyFilter) : null;
+
+  const thead = document.getElementById('frTableHead');
+  thead.innerHTML = compareOn
+    ? `<th>Faculty</th><th>Period A Submissions</th><th>Period A Avg</th><th>Period B Submissions</th><th>Period B Avg</th><th>Δ Change</th>`
+    : `<th>Faculty</th><th>Submissions</th><th>Avg Technical</th><th>Avg Doubt Solving</th><th>Avg Topics</th><th>Avg Pace</th><th>Avg Overall</th><th>Combined Avg</th>`;
+
+  const tb = document.getElementById('facultyRatingsTable');
+  const nameSet = new Set([...Object.keys(statsA), ...(statsB ? Object.keys(statsB) : [])]);
+  const names = [...nameSet].sort((a,b) => {
+    const aAvg = statsA[a] ? statsA[a].combinedAvg : -1;
+    const bAvg = statsA[b] ? statsA[b].combinedAvg : -1;
+    return bAvg - aAvg;
+  });
+
+  if (!names.length) {
+    tb.innerHTML = `<tr><td colspan="${compareOn?6:8}" style="color:var(--text3);text-align:center;padding:20px">No feedback found for this filter.</td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = '';
+  names.forEach(name => {
+    const a = statsA[name];
+    const tr = document.createElement('tr');
+    if (compareOn) {
+      const b = statsB[name];
+      const aAvg = a ? a.combinedAvg : null, bAvg = b ? b.combinedAvg : null;
+      const delta = (aAvg!==null && bAvg!==null) ? (aAvg - bAvg) : null;
+      const deltaColor = delta === null ? 'var(--text3)' : (delta > 0 ? 'var(--green)' : (delta < 0 ? 'var(--red)' : 'var(--text2)'));
+      const deltaLabel = delta === null ? '—' : (delta > 0.001 ? '▲ ' : (delta < -0.001 ? '▼ ' : '– ')) + Math.abs(delta).toFixed(1);
+      tr.innerHTML = `
+        <td>${name}</td>
+        <td>${a ? a.count : 0}</td>
+        <td style="font-weight:700">${aAvg!==null ? aAvg.toFixed(1) : '—'}</td>
+        <td>${b ? b.count : 0}</td>
+        <td style="font-weight:700">${bAvg!==null ? bAvg.toFixed(1) : '—'}</td>
+        <td style="color:${deltaColor};font-weight:700">${deltaLabel}</td>`;
+    } else {
+      const avgColor = a.combinedAvg >= 8 ? 'var(--green)' : (a.combinedAvg >= 5 ? '#F0C040' : 'var(--red)');
+      tr.innerHTML = `
+        <td>${name}</td>
+        <td>${a.count}</td>
+        <td>${a.avg.technical.toFixed(1)}</td>
+        <td>${a.avg.doubtSolving.toFixed(1)}</td>
+        <td>${a.avg.topicsUnderstood.toFixed(1)}</td>
+        <td>${a.avg.paceClarity.toFixed(1)}</td>
+        <td>${a.avg.overall.toFixed(1)}</td>
+        <td style="color:${avgColor};font-weight:700">${a.combinedAvg.toFixed(1)}</td>`;
+    }
+    tb.appendChild(tr);
+  });
+}
+window.renderFacultyRatings = renderFacultyRatings;
 
 function avgRating(ratings) {
   if (!ratings) return 0;
@@ -2893,6 +3101,8 @@ async function loadOverview() {
   const total=allStudents.length;
   const active=allStudents.filter(s=>s.status==='active'||!s.status).length;
   const onLeave=allStudents.filter(s=>s.status==='on_leave').length;
+  const deactivated=allStudents.filter(s=>s.status==='deactivated').length;
+  const completed=allStudents.filter(s=>s.status==='completed').length;
 
   // Today present
   const todayStart=new Date(); todayStart.setHours(0,0,0,0);
@@ -2905,6 +3115,8 @@ async function loadOverview() {
   document.getElementById('ov-active').textContent=active;
   document.getElementById('ov-present').textContent=uniqueToday;
   document.getElementById('ov-leave').textContent=onLeave;
+  document.getElementById('ov-deactivated').textContent=deactivated;
+  document.getElementById('ov-completed').textContent=completed;
 
   // Today table
   const tb=document.getElementById('todayTable'); tb.innerHTML='';
@@ -2919,31 +3131,90 @@ async function loadOverview() {
 }
 
 // ── LIVE SLOTS ──
+function cssSafe(str) { return String(str).replace(/[^a-zA-Z0-9_-]/g,'_'); }
+
+// Rough overall course-progress % for a student — average of (approved sessions / total
+// sessions) across all their enrolled modules. Returns null if they have no modules yet.
+function computeStudentOverallProgress(s) {
+  const modules = s.modules || {};
+  const modIds = Object.keys(modules);
+  if (!modIds.length) return null;
+  let totalApproved = 0, totalSessionsAll = 0;
+  modIds.forEach(modId => {
+    const mod = modules[modId];
+    const sessions = mod.sessions || {};
+    const totalSessions = mod.totalSessions || Object.keys(sessions).length || 1;
+    totalApproved += Object.values(sessions).filter(x=>x.approved).length;
+    totalSessionsAll += totalSessions;
+  });
+  if (!totalSessionsAll) return null;
+  return Math.min(100, Math.round((totalApproved/totalSessionsAll)*100));
+}
+
+let liveSlotsData = {};   // slotName -> { present:[{student,record}], left:[...], absent:[...] }
+let currentSlotDetail = null;
+
 async function loadLiveSlots() {
   const grid=document.getElementById('slotsGrid');
   grid.innerHTML='<p style="color:var(--text3)">⏳ Loading live slots…</p>';
+  closeSlotDetail();
   try {
     const todayStart=new Date(); todayStart.setHours(0,0,0,0);
-    const q=query(collection(db,'cadd_attendance'),where('checkIn','>=',Timestamp.fromDate(todayStart)),where('checkOut','==',null));
+    const todayDow = new Date().getDay();
+    // Single range query (checkIn >= today) — no composite index needed. We fetch every
+    // record from today (not just still-active ones) so we can also show who has already
+    // left for the day, alongside who's genuinely absent.
+    const q=query(collection(db,'cadd_attendance'),where('checkIn','>=',Timestamp.fromDate(todayStart)));
     const snap=await getDocs(q);
-    const active=snap.docs.map(d=>d.data());
+    const todayRecs=snap.docs.map(d=>d.data());
 
-    grid.innerHTML='';
-    const slotMap={};
-    active.forEach(r=>{
-      const s=r.slot||'Unassigned';
-      if(!slotMap[s]) slotMap[s]=0;
-      slotMap[s]++;
+    // studentDocId -> today's record (latest, in the rare case of more than one)
+    const recByStudent = {};
+    todayRecs.forEach(r=>{
+      const existing = recByStudent[r.studentDocId];
+      if (!existing || r.checkIn.seconds > existing.checkIn.seconds) recByStudent[r.studentDocId] = r;
     });
 
-    const allSlotNames=[...slots];
-    if(active.some(r=>!r.slot)) allSlotNames.push('Unassigned');
+    const activeStudents = allStudents.filter(s=>s.status==='active'||!s.status);
 
+    const allSlotNames=[...slots];
+    activeStudents.forEach(s=>{
+      const slotName = s.slot || 'Unassigned';
+      if (!allSlotNames.includes(slotName)) allSlotNames.push(slotName);
+    });
+
+    liveSlotsData = {};
+    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[] }; });
+
+    activeStudents.forEach(s=>{
+      const slotName = s.slot || 'Unassigned';
+      // Schedule-aware, same logic as the attendance-fix elsewhere: only students actually
+      // scheduled for today (per their attendanceDays) count as "absent" if no record exists.
+      const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
+      const scheduledToday = !schedDays.length || schedDays.includes(todayDow);
+      const rec = recByStudent[s.docId];
+      const entry = { student: s, record: rec || null };
+      if (rec && !rec.checkOut) {
+        liveSlotsData[slotName].present.push(entry);
+      } else if (rec && rec.checkOut) {
+        liveSlotsData[slotName].left.push(entry);
+      } else if (scheduledToday) {
+        liveSlotsData[slotName].absent.push(entry);
+      }
+      // Not scheduled today and no record — this student just isn't part of today's picture.
+    });
+
+    grid.innerHTML='';
     if(!allSlotNames.length){grid.innerHTML='<p style="color:var(--text3)">No slots configured yet. Add slots in Settings.</p>';return;}
-    allSlotNames.forEach(s=>{
-      const count=slotMap[s]||0;
-      const div=document.createElement('div'); div.className='slot-card';
-      div.innerHTML=`<div class="sname">${s}</div><div class="scount">${count}</div><div class="slabel">students active now</div>`;
+
+    allSlotNames.forEach(sn=>{
+      const d = liveSlotsData[sn];
+      const div=document.createElement('div');
+      div.className='slot-card';
+      div.id='slot-card-'+cssSafe(sn);
+      div.onclick=()=>showSlotDetail(sn);
+      div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">students active now</div>
+        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span></div>`;
       grid.appendChild(div);
     });
   } catch(e) {
@@ -2960,6 +3231,110 @@ async function loadLiveSlots() {
     }
   }
 }
+window.loadLiveSlots = loadLiveSlots;
+
+function showSlotDetail(slotName) {
+  currentSlotDetail = slotName;
+  document.querySelectorAll('.slot-card').forEach(c=>c.classList.remove('selected'));
+  const card = document.getElementById('slot-card-'+cssSafe(slotName));
+  if (card) card.classList.add('selected');
+  document.getElementById('slotDetailPanel').style.display='block';
+  document.getElementById('slotDetailTitle').textContent = `${slotName} — Today`;
+  populateSlotDetailFilterOptions(slotName);
+  renderSlotDetail();
+  document.getElementById('slotDetailPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+window.showSlotDetail = showSlotDetail;
+
+function closeSlotDetail() {
+  currentSlotDetail = null;
+  const panel = document.getElementById('slotDetailPanel');
+  if (panel) panel.style.display='none';
+  document.querySelectorAll('.slot-card').forEach(c=>c.classList.remove('selected'));
+}
+window.closeSlotDetail = closeSlotDetail;
+
+function populateSlotDetailFilterOptions(slotName) {
+  const d = liveSlotsData[slotName]; if (!d) return;
+  const all = [...d.present, ...d.left, ...d.absent];
+  const courses = new Set(all.map(e=>e.student.course).filter(Boolean));
+  const faculties = new Set(all.map(e=>e.student.faculty).filter(Boolean));
+  const courseSel = document.getElementById('slotDetailCourseFilter');
+  const facSel = document.getElementById('slotDetailFacultyFilter');
+  const curCourse = courseSel.value, curFac = facSel.value;
+  courseSel.innerHTML = '<option value="">All Courses</option>' + [...courses].sort().map(c=>`<option value="${c.replace(/"/g,'&quot;')}">${c}</option>`).join('');
+  facSel.innerHTML = '<option value="">All Faculty</option>' + [...faculties].sort().map(fid=>{
+    const name = (allFaculty.find(f=>f.docId===fid)||{}).name || fid;
+    return `<option value="${fid}">${name}</option>`;
+  }).join('');
+  courseSel.value = curCourse; facSel.value = curFac;
+}
+window.populateSlotDetailFilterOptions = populateSlotDetailFilterOptions;
+
+function renderSlotDetail() {
+  if (!currentSlotDetail) return;
+  const d = liveSlotsData[currentSlotDetail];
+  const tb = document.getElementById('slotDetailTable');
+  if (!d) { tb.innerHTML = '<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No data.</td></tr>'; return; }
+
+  const search = (document.getElementById('slotDetailSearch').value||'').toLowerCase();
+  const statusFilter = document.getElementById('slotDetailStatusFilter').value;
+  const courseFilter = document.getElementById('slotDetailCourseFilter').value;
+  const facFilter = document.getElementById('slotDetailFacultyFilter').value;
+
+  let rows = [];
+  d.present.forEach(e=>rows.push({...e, statusKey:'present'}));
+  d.left.forEach(e=>rows.push({...e, statusKey:'left'}));
+  d.absent.forEach(e=>rows.push({...e, statusKey:'absent'}));
+
+  rows = rows.filter(row => {
+    const s = row.student;
+    if (search && !(s.name||'').toLowerCase().includes(search)) return false;
+    if (statusFilter && row.statusKey !== statusFilter) return false;
+    if (courseFilter && s.course !== courseFilter) return false;
+    if (facFilter && s.faculty !== facFilter) return false;
+    return true;
+  });
+
+  if (!rows.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No students match this filter.</td></tr>';
+    return;
+  }
+
+  const order = { present:0, left:1, absent:2 };
+  rows.sort((a,b)=> order[a.statusKey]-order[b.statusKey] || (a.student.name||'').localeCompare(b.student.name||''));
+
+  tb.innerHTML='';
+  rows.forEach(row=>{
+    const s = row.student;
+    const facName = (allFaculty.find(f=>f.docId===s.faculty)||{}).name || '—';
+    const progress = computeStudentOverallProgress(s);
+    const progressHtml = progress===null ? '<span style="color:var(--text3)">—</span>'
+      : `<span class="progress-mini-bar"><span class="progress-mini-fill" style="width:${progress}%"></span></span><span style="font-size:11px">${progress}%</span>`;
+    let statusBadge, ciTime='—', coTime='—';
+    if (row.statusKey==='present') {
+      statusBadge = '<span class="badge sd-present">🟢 Present (Live)</span>';
+      ciTime = new Date(row.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+    } else if (row.statusKey==='left') {
+      statusBadge = '<span class="badge sd-left">✅ Left for the Day</span>';
+      ciTime = new Date(row.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      coTime = row.record.checkOut ? new Date(row.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
+    } else {
+      statusBadge = '<span class="badge sd-absent">⚪ Absent</span>';
+    }
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${s.name||'—'}</td>
+      <td style="font-size:12px">${s.course||'—'}</td>
+      <td style="font-size:12px;color:var(--text2)">${facName}</td>
+      <td>${progressHtml}</td>
+      <td>${statusBadge}</td>
+      <td style="font-size:12px">${ciTime}</td>
+      <td style="font-size:12px">${coTime}</td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderSlotDetail = renderSlotDetail;
 
 // ── NAV ──
 function showPage(id) {
@@ -2985,7 +3360,7 @@ function switchTab(tab) {
 }
 
 function viewFullComment(studentName, text) {
-  document.getElementById('commentViewTitle').textContent = studentName ? `${studentName} — Comment` : 'Feedback Comment';
+  document.getElementById('commentViewTitle').textContent = studentName ? `${studentName} — How Can We Improve?` : 'How Can We Improve?';
   document.getElementById('commentViewText').textContent = text || '(no comment left)';
   document.getElementById('commentViewModal').style.display = 'flex';
 }
