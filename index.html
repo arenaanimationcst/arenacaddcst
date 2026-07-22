@@ -240,6 +240,7 @@
     .streak-day.absent { background:rgba(255,255,255,0.04); color:var(--text-muted); border:1px solid var(--cadd-border); }
     .streak-day.today-present { background:rgba(244,121,32,0.2); color:var(--cadd-orange); border:2px solid var(--cadd-orange); }
     .streak-day.today-absent { background:rgba(255,255,255,0.04); color:var(--text-muted); border:2px solid var(--cadd-orange); }
+    .streak-day.not-scheduled { background:transparent; color:var(--text-muted); border:1px dashed rgba(255,255,255,0.08); opacity:0.4; }
 
     /* History */
     .history-card { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:var(--radius); overflow:hidden; }
@@ -1606,8 +1607,22 @@ async function loadStats() {
   const baseDate = currentStudent.trackingStartDate
     ? new Date(currentStudent.trackingStartDate.seconds*1000)
     : (currentStudent.admissionDate ? new Date(currentStudent.admissionDate.seconds*1000) : new Date());
-  const totalDays = Math.floor((new Date()-baseDate)/(864e5))+1;
-  const absentDays = Math.max(0, totalDays - presentDays.size);
+  baseDate.setHours(0,0,0,0);
+
+  // Schedule-aware: only count the student's OWN scheduled weekdays (e.g. Wed/Fri/Sat) as
+  // days they were expected to attend. Previously every calendar day from baseDate to today
+  // was counted as a "total day", so a student scheduled for Wed/Fri/Sat who attended every
+  // one of those days would still show as "absent" for the Sun/Mon/Tue/Thu in between.
+  const scheduledDays = Array.isArray(currentStudent.attendanceDays) ? currentStudent.attendanceDays.map(Number) : [];
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  let totalScheduledDays = 0;
+  { const cursor = new Date(baseDate);
+    while (cursor <= today0) {
+      if (!scheduledDays.length || scheduledDays.includes(cursor.getDay())) totalScheduledDays++;
+      cursor.setDate(cursor.getDate()+1);
+    }
+  }
+  const absentDays = Math.max(0, totalScheduledDays - presentDays.size);
 
   document.getElementById('statDays').textContent = presentDays.size;
   document.getElementById('statAbsent').textContent = absentDays;
@@ -1617,12 +1632,17 @@ async function loadStats() {
   const days=['S','M','T','W','T','F','S'];
   const row = document.getElementById('streakRow'); row.innerHTML='';
   for (let i=13;i>=0;i--) {
-    const d=new Date(); d.setDate(d.getDate()-i);
+    const d=new Date(); d.setDate(d.getDate()-i); d.setHours(0,0,0,0);
+    const isScheduled = !scheduledDays.length || scheduledDays.includes(d.getDay());
     const isPresent=presentDays.has(d.toDateString()), isToday=i===0;
     const div=document.createElement('div');
-    div.className='streak-day '+(isToday?(isPresent?'today-present':'today-absent'):(isPresent?'present':'absent'));
+    if (!isScheduled) {
+      div.className='streak-day not-scheduled';
+    } else {
+      div.className='streak-day '+(isToday?(isPresent?'today-present':'today-absent'):(isPresent?'present':'absent'));
+    }
     div.textContent=days[d.getDay()];
-    div.title=d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+    div.title=d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+(isScheduled?'':' (not scheduled)');
     row.appendChild(div);
   }
 
