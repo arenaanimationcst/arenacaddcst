@@ -2490,10 +2490,25 @@ async function loadModalAttendance(docId, s) {
   // Uses trackingStartDate (when THIS app started tracking them) rather than admissionDate
   // (their real-world join date, which could predate this app and inflate "days absent").
   const admDate=s.trackingStartDate?new Date(s.trackingStartDate.seconds*1000):(s.admissionDate?new Date(s.admissionDate.seconds*1000):new Date());
-  const totalDays=Math.floor((new Date()-admDate)/864e5)+1;
+  admDate.setHours(0,0,0,0);
+
+  // Schedule-aware: only count the student's OWN scheduled weekdays (e.g. Wed/Fri/Sat) as
+  // days they were expected to attend — same logic as scheduledDaysMissed() below. Previously
+  // every calendar day from admDate to today was counted, so a student scheduled for
+  // Wed/Fri/Sat who attended every one of those days would still show "absent" for the
+  // Sun/Mon/Tue/Thu in between.
+  const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  let totalScheduledDays = 0;
+  { const cursor = new Date(admDate);
+    while (cursor <= today0) {
+      if (!schedDays.length || schedDays.includes(cursor.getDay())) totalScheduledDays++;
+      cursor.setDate(cursor.getDate()+1);
+    }
+  }
 
   document.getElementById('ms-days').textContent=presentDays.size;
-  document.getElementById('ms-absent').textContent=Math.max(0,totalDays-presentDays.size);
+  document.getElementById('ms-absent').textContent=Math.max(0,totalScheduledDays-presentDays.size);
   document.getElementById('ms-hours').textContent=totalHrs.toFixed(1)+'h';
 
   // Active session detection for Force Log Out
