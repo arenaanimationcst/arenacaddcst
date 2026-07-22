@@ -121,6 +121,13 @@
     .btn-primary:active { transform:scale(0.99); }
     .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
 
+    .btn-secondary {
+      background:transparent; color:var(--text-secondary); border:1px solid var(--cadd-border);
+      border-radius:9px; padding:13px 18px; font-size:14px; font-weight:600;
+      font-family:'Inter',sans-serif; cursor:pointer; transition:border-color 0.2s;
+    }
+    .btn-secondary:hover { border-color:var(--cadd-orange); color:var(--text-primary); }
+
     /* DASHBOARD */
     #dashboard { display:none; width:100%; max-width:520px; }
 
@@ -597,49 +604,65 @@
       <div id="feedbackFormView" style="display:none">
         <p style="color:var(--text-muted);font-size:12px;margin-bottom:16px">Faculty: <strong id="feedbackFacultyName" style="color:var(--text-primary)">—</strong></p>
 
-        <div class="fb-rating-group">
-          <label>Technical / Course Knowledge</label>
-          <div class="fb-rating-row">
-            <input type="range" id="fbRating_technical" min="0" max="10" step="0.5" value="8"/>
-            <div class="fb-rating-val" id="fbRating_technical_val">8</div>
+        <!-- STEP 1: mandatory intro — student must read and press Next before rating -->
+        <div id="fbStep1">
+          <div style="background:rgba(244,121,32,0.08);border:1px solid rgba(244,121,32,0.25);border-radius:10px;padding:14px 16px;margin-bottom:18px">
+            <p style="color:var(--text-secondary);font-size:13px;line-height:1.65;margin:0">
+              🙏 Your feedback is valuable to us — please rate honestly. Whether things are going great or you feel something could be better, let us know. This helps us keep improving for you.
+            </p>
           </div>
-        </div>
-        <div class="fb-rating-group">
-          <label>Doubt Solving Ability</label>
-          <div class="fb-rating-row">
-            <input type="range" id="fbRating_doubtSolving" min="0" max="10" step="0.5" value="8"/>
-            <div class="fb-rating-val" id="fbRating_doubtSolving_val">8</div>
-          </div>
-        </div>
-        <div class="fb-rating-group">
-          <label>Have You Understood All Topics Covered?</label>
-          <div class="fb-rating-row">
-            <input type="range" id="fbRating_topicsUnderstood" min="0" max="10" step="0.5" value="8"/>
-            <div class="fb-rating-val" id="fbRating_topicsUnderstood_val">8</div>
-          </div>
-        </div>
-        <div class="fb-rating-group">
-          <label>Teaching Pace & Clarity</label>
-          <div class="fb-rating-row">
-            <input type="range" id="fbRating_paceClarity" min="0" max="10" step="0.5" value="8"/>
-            <div class="fb-rating-val" id="fbRating_paceClarity_val">8</div>
-          </div>
-        </div>
-        <div class="fb-rating-group">
-          <label>Overall Faculty Rating</label>
-          <div class="fb-rating-row">
-            <input type="range" id="fbRating_overall" min="0" max="10" step="0.5" value="8"/>
-            <div class="fb-rating-val" id="fbRating_overall_val">8</div>
-          </div>
+          <button class="btn-primary" onclick="fbGoToStep2()">Next →</button>
         </div>
 
-        <div class="fb-rating-group">
-          <label>Feedback and Scope of Improvement</label>
-          <textarea class="fb-comment-box" id="fbComment" maxlength="500" rows="4" placeholder="Share your thoughts — what's working, what could be better…"></textarea>
-          <div class="fb-char-count"><span id="fbCommentCount">0</span>/500</div>
-        </div>
+        <!-- STEP 2: ratings + improvement comment + submit -->
+        <div id="fbStep2" style="display:none">
+          <div class="fb-rating-group">
+            <label>Technical / Course Knowledge</label>
+            <div class="fb-rating-row">
+              <input type="range" id="fbRating_technical" min="0" max="10" step="0.5" value="8"/>
+              <div class="fb-rating-val" id="fbRating_technical_val">8</div>
+            </div>
+          </div>
+          <div class="fb-rating-group">
+            <label>Doubt Solving Ability</label>
+            <div class="fb-rating-row">
+              <input type="range" id="fbRating_doubtSolving" min="0" max="10" step="0.5" value="8"/>
+              <div class="fb-rating-val" id="fbRating_doubtSolving_val">8</div>
+            </div>
+          </div>
+          <div class="fb-rating-group">
+            <label>Have You Understood All Topics Covered?</label>
+            <div class="fb-rating-row">
+              <input type="range" id="fbRating_topicsUnderstood" min="0" max="10" step="0.5" value="8"/>
+              <div class="fb-rating-val" id="fbRating_topicsUnderstood_val">8</div>
+            </div>
+          </div>
+          <div class="fb-rating-group">
+            <label>Teaching Pace & Clarity</label>
+            <div class="fb-rating-row">
+              <input type="range" id="fbRating_paceClarity" min="0" max="10" step="0.5" value="8"/>
+              <div class="fb-rating-val" id="fbRating_paceClarity_val">8</div>
+            </div>
+          </div>
+          <div class="fb-rating-group">
+            <label>Overall Faculty Rating</label>
+            <div class="fb-rating-row">
+              <input type="range" id="fbRating_overall" min="0" max="10" step="0.5" value="8"/>
+              <div class="fb-rating-val" id="fbRating_overall_val">8</div>
+            </div>
+          </div>
 
-        <button class="btn-primary" id="fbSubmitBtn" onclick="submitFeedback()">Submit Feedback</button>
+          <div class="fb-rating-group">
+            <label>How can we improve?</label>
+            <textarea class="fb-comment-box" id="fbComment" maxlength="500" rows="4" placeholder="Share your thoughts — what's working, what could be better…"></textarea>
+            <div class="fb-char-count"><span id="fbCommentCount">0</span>/500</div>
+          </div>
+
+          <div style="display:flex;gap:10px">
+            <button class="btn-secondary" onclick="fbBackToStep1()">← Back</button>
+            <button class="btn-primary" id="fbSubmitBtn" onclick="submitFeedback()" style="flex:1">Submit Feedback</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1185,6 +1208,24 @@ FB_RATING_IDS.forEach(id => {
     document.getElementById('fbRating_' + id + '_val').textContent = el.value;
   });
 });
+
+// Two-step feedback flow: Step 1 is a mandatory intro the student must read and
+// acknowledge (Next) before Step 2 (ratings + improvement comment + Submit) appears.
+function fbResetToStep1() {
+  document.getElementById('fbStep1').style.display = 'block';
+  document.getElementById('fbStep2').style.display = 'none';
+}
+function fbGoToStep2() {
+  document.getElementById('fbStep1').style.display = 'none';
+  document.getElementById('fbStep2').style.display = 'block';
+}
+function fbBackToStep1() {
+  document.getElementById('fbStep2').style.display = 'none';
+  document.getElementById('fbStep1').style.display = 'block';
+}
+window.fbGoToStep2 = fbGoToStep2;
+window.fbBackToStep1 = fbBackToStep1;
+
 const fbCommentEl = document.getElementById('fbComment');
 if (fbCommentEl) fbCommentEl.addEventListener('input', () => {
   document.getElementById('fbCommentCount').textContent = fbCommentEl.value.length;
@@ -1242,6 +1283,7 @@ async function loadFeedbackSection() {
     document.getElementById('feedbackFacultyName').textContent = fbCurrentFacultyName;
     document.getElementById('feedbackLockedView').style.display = 'none';
     document.getElementById('feedbackFormView').style.display = 'block';
+    fbResetToStep1();
     document.getElementById('stDot-feedback')?.classList.add('show');
   } else {
     const daysUntil = Math.max(0, nextCheckpointDay - daysSince);
