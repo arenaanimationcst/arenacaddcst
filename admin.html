@@ -2344,8 +2344,10 @@ function renderFacultyLeave() {
         <button class="btn btn-red btn-sm" onclick="rejectFacultyLeave('${r.id}')">✕ Reject</button>`;
     } else if (r.status === 'approved') {
       statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
+      actionsHtml = `<button class="btn btn-red btn-sm" onclick="revokeFacultyLeave('${r.id}')">↩️ Revoke</button>`;
     } else {
       statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
+      actionsHtml = `<button class="btn btn-green btn-sm" onclick="approveFacultyLeave('${r.id}')">✅ Approve Instead</button>`;
     }
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -2385,6 +2387,23 @@ async function rejectFacultyLeave(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.rejectFacultyLeave = rejectFacultyLeave;
+
+// "Callback"/undo for an approved faculty leave — e.g. the leave was entered by mistake, or
+// the faculty ended up coming in after all. Setting status back to 'rejected' removes it from
+// getFacultyLeaveRanges() immediately, so those students go back to being counted normally
+// (Streak, Days Absent, Live Slots) — no separate cleanup needed anywhere else.
+async function revokeFacultyLeave(id) {
+  if (!confirm('Revoke this approved faculty leave? Affected students will go back to being counted normally (no longer excused) for these dates.')) return;
+  try {
+    await updateDoc(doc(db,'cadd_faculty_leave',id), { status:'rejected', reviewedAt: Timestamp.now() });
+    const r = allFacultyLeave.find(x=>x.id===id);
+    if (r) { r.status='rejected'; r.reviewedAt=Timestamp.now(); }
+    showToast('Faculty leave revoked', 'success');
+    renderFacultyLeave();
+    filterStudents(); // refresh streak column now that these days count again
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.revokeFacultyLeave = revokeFacultyLeave;
 
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
