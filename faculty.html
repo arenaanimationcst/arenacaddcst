@@ -222,6 +222,7 @@
     <button class="tab-btn" id="tab-live" onclick="switchFacTab('live')">🟢 Live Now</button>
     <button class="tab-btn" id="tab-attlog" onclick="switchFacTab('attlog')">📅 Attendance Log</button>
     <button class="tab-btn" id="tab-feedback" onclick="switchFacTab('feedback')">💬 Feedback</button>
+    <button class="tab-btn" id="tab-leave" onclick="switchFacTab('leave')">🌴 Leave Requests</button>
   </div>
 
   <!-- ATTENDANCE LOG TAB (this faculty's own students only) -->
@@ -247,6 +248,22 @@
       Only shows feedback the admin has chosen to make visible to you, for your own students. Student identities are kept anonymous here.
     </p>
     <div id="feedbackFacList"></div>
+  </div>
+
+  <!-- LEAVE REQUESTS TAB (own students only) -->
+  <div id="facTabLeave" style="display:none">
+    <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+      Your response here is a recommendation only — the admin makes the final call and can approve or reject a request regardless of what you choose.
+    </p>
+    <div class="search-row">
+      <select id="lrFacStatusFilter" onchange="renderFacLeaveRequests()">
+        <option value="pending">⏳ Pending Admin Review</option>
+        <option value="">All</option>
+        <option value="approved">✅ Approved</option>
+        <option value="rejected">❌ Rejected</option>
+      </select>
+    </div>
+    <div id="leaveFacList"><div class="empty-state"><div class="icon">🌴</div>Loading…</div></div>
   </div>
 
 
@@ -602,14 +619,17 @@ function switchFacTab(tab) {
   document.getElementById('facTabLive').style.display = tab === 'live' ? 'block' : 'none';
   document.getElementById('facTabAttlog').style.display = tab === 'attlog' ? 'block' : 'none';
   document.getElementById('facTabFeedback').style.display = tab === 'feedback' ? 'block' : 'none';
+  document.getElementById('facTabLeave').style.display = tab === 'leave' ? 'block' : 'none';
   document.getElementById('tab-pending').classList.toggle('active', tab === 'pending');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
   document.getElementById('tab-live').classList.toggle('active', tab === 'live');
   document.getElementById('tab-attlog').classList.toggle('active', tab === 'attlog');
   document.getElementById('tab-feedback').classList.toggle('active', tab === 'feedback');
+  document.getElementById('tab-leave').classList.toggle('active', tab === 'leave');
   if (tab === 'live') loadLiveSlots();
   if (tab === 'attlog') loadFacAttendance();
   if (tab === 'feedback') loadFacFeedback();
+  if (tab === 'leave') loadFacLeaveRequests();
 }
 
 // ── ATTENDANCE LOG (faculty's own students only) ──
@@ -672,6 +692,104 @@ async function loadFacFeedback() {
   }
 }
 window.loadFacFeedback = loadFacFeedback;
+
+// ── LEAVE REQUESTS (own students only) ──
+// Single field orderBy query (no where clause, no composite index needed) — "is this my
+// student" filtered client-side using the myStudents list, same pattern as attendance/feedback.
+// Faculty can leave a recommendation (facultyReviewStatus) but this never blocks or replaces
+// the admin's own approve/reject action in admin.html — it's purely advisory context for them.
+let facLeaveRequests = [];
+
+async function loadFacLeaveRequests() {
+  const wrap = document.getElementById('leaveFacList');
+  wrap.innerHTML = '<div class="empty-state"><div class="icon">🌴</div>Loading…</div>';
+  try {
+    const myDocIds = new Set(myStudents.map(s => s.docId));
+    const snap = await getDocs(query(collection(db, 'cadd_leave_requests'), orderBy('requestedAt', 'desc')));
+    facLeaveRequests = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(r => myDocIds.has(r.studentDocId));
+    renderFacLeaveRequests();
+  } catch (e) {
+    console.error('Leave requests load error:', e);
+    wrap.innerHTML = `<p style="color:var(--red)">Error loading leave requests: ${e.message}</p>`;
+  }
+}
+window.loadFacLeaveRequests = loadFacLeaveRequests;
+
+function renderFacLeaveRequests() {
+  const wrap = document.getElementById('leaveFacList');
+  const statusFilter = document.getElementById('lrFacStatusFilter').value;
+  const list = facLeaveRequests.filter(r => !statusFilter || r.status === statusFilter);
+
+  if (!list.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">🌴</div>No leave requests found for your students.</div>';
+    return;
+  }
+
+  wrap.innerHTML = '';
+  list.forEach(r => {
+    const appliedLabel = r.requestedAt
+      ? new Date(r.requestedAt.seconds * 1000).toLocaleString('en-IN', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+      : '—';
+
+    let adminStatusHtml;
+    if (r.status === 'approved') adminStatusHtml = `<span style="color:var(--green);font-weight:600">✅ Approved by admin</span>`;
+    else if (r.status === 'rejected') adminStatusHtml = `<span style="color:var(--red);font-weight:600">❌ Rejected by admin</span>`;
+    else adminStatusHtml = `<span style="color:var(--yellow);font-weight:600">⏳ Pending admin review</span>`;
+
+    let facultyReviewHtml;
+    if (r.facultyReviewStatus === 'recommended') {
+      facultyReviewHtml = `<span style="color:var(--green);font-size:12px">👍 You recommended approval${r.facultyReviewedBy ? ' — ' + r.facultyReviewedBy : ''}</span>`;
+    } else if (r.facultyReviewStatus === 'not_recommended') {
+      facultyReviewHtml = `<span style="color:var(--red);font-size:12px">👎 You flagged this as not recommended${r.facultyReviewedBy ? ' — ' + r.facultyReviewedBy : ''}</span>`;
+    } else {
+      facultyReviewHtml = `<span style="color:var(--text3);font-size:12px">You haven't reviewed this yet</span>`;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.style.marginBottom = '12px';
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:600">${r.studentName || '—'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${r.course || '—'} · Applied ${appliedLabel}</div>
+        </div>
+        <div style="font-size:12px">${adminStatusHtml}</div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);background:rgba(255,255,255,0.03);border-radius:8px;padding:10px;border:1px solid var(--border);margin-bottom:10px">
+        ${(r.reason || '(no reason given)').replace(/</g,'&lt;')}
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div>${facultyReviewHtml}</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-green btn-sm" onclick="facultyReviewLeaveRequest('${r.id}','recommended')">👍 Recommend</button>
+          <button class="btn btn-red btn-sm" onclick="facultyReviewLeaveRequest('${r.id}','not_recommended')">👎 Not Recommended</button>
+        </div>
+      </div>
+    `;
+    wrap.appendChild(div);
+  });
+}
+window.renderFacLeaveRequests = renderFacLeaveRequests;
+
+async function facultyReviewLeaveRequest(requestId, decision) {
+  try {
+    await updateDoc(doc(db, 'cadd_leave_requests', requestId), {
+      facultyReviewStatus: decision,
+      facultyReviewedBy: currentFaculty.name,
+      facultyReviewedAt: Timestamp.now()
+    });
+    const r = facLeaveRequests.find(x => x.id === requestId);
+    if (r) { r.facultyReviewStatus = decision; r.facultyReviewedBy = currentFaculty.name; r.facultyReviewedAt = Timestamp.now(); }
+    showToast(decision === 'recommended' ? 'Marked as recommended — admin will make the final call' : 'Marked as not recommended — admin will make the final call', 'success');
+    renderFacLeaveRequests();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+window.facultyReviewLeaveRequest = facultyReviewLeaveRequest;
 
 async function fetchFacAttendance() {
   try {
