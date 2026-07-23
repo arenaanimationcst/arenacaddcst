@@ -320,6 +320,7 @@
             <option value="present">🟢 Present (Live)</option>
             <option value="left">✅ Left for the Day</option>
             <option value="absent">⚪ Absent</option>
+            <option value="notScheduled">➖ Not Scheduled Today</option>
           </select>
           <select id="slotDetailCourseFilter" onchange="renderSlotDetail()"><option value="">All Courses</option></select>
           <select id="slotDetailFacultyFilter" onchange="renderSlotDetail()"><option value="">All Faculty</option></select>
@@ -3184,7 +3185,7 @@ async function loadLiveSlots() {
     });
 
     liveSlotsData = {};
-    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[] }; });
+    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[] }; });
 
     activeStudents.forEach(s=>{
       const slotName = s.slot || 'Unassigned';
@@ -3200,8 +3201,11 @@ async function loadLiveSlots() {
         liveSlotsData[slotName].left.push(entry);
       } else if (scheduledToday) {
         liveSlotsData[slotName].absent.push(entry);
+      } else {
+        // Not scheduled today and no record — still shown, so the slot roster stays complete;
+        // just flagged distinctly instead of being counted as absent.
+        liveSlotsData[slotName].notScheduled.push(entry);
       }
-      // Not scheduled today and no record — this student just isn't part of today's picture.
     });
 
     grid.innerHTML='';
@@ -3209,12 +3213,13 @@ async function loadLiveSlots() {
 
     allSlotNames.forEach(sn=>{
       const d = liveSlotsData[sn];
+      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length;
       const div=document.createElement('div');
       div.className='slot-card';
       div.id='slot-card-'+cssSafe(sn);
       div.onclick=()=>showSlotDetail(sn);
-      div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">students active now</div>
-        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span></div>`;
+      div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">active now · ${totalInSlot} total in slot</div>
+        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span></div>`;
       grid.appendChild(div);
     });
   } catch(e) {
@@ -3256,7 +3261,7 @@ window.closeSlotDetail = closeSlotDetail;
 
 function populateSlotDetailFilterOptions(slotName) {
   const d = liveSlotsData[slotName]; if (!d) return;
-  const all = [...d.present, ...d.left, ...d.absent];
+  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled];
   const courses = new Set(all.map(e=>e.student.course).filter(Boolean));
   const faculties = new Set(all.map(e=>e.student.faculty).filter(Boolean));
   const courseSel = document.getElementById('slotDetailCourseFilter');
@@ -3286,6 +3291,7 @@ function renderSlotDetail() {
   d.present.forEach(e=>rows.push({...e, statusKey:'present'}));
   d.left.forEach(e=>rows.push({...e, statusKey:'left'}));
   d.absent.forEach(e=>rows.push({...e, statusKey:'absent'}));
+  d.notScheduled.forEach(e=>rows.push({...e, statusKey:'notScheduled'}));
 
   rows = rows.filter(row => {
     const s = row.student;
@@ -3301,7 +3307,7 @@ function renderSlotDetail() {
     return;
   }
 
-  const order = { present:0, left:1, absent:2 };
+  const order = { present:0, left:1, absent:2, notScheduled:3 };
   rows.sort((a,b)=> order[a.statusKey]-order[b.statusKey] || (a.student.name||'').localeCompare(b.student.name||''));
 
   tb.innerHTML='';
@@ -3319,8 +3325,10 @@ function renderSlotDetail() {
       statusBadge = '<span class="badge sd-left">✅ Left for the Day</span>';
       ciTime = new Date(row.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
       coTime = row.record.checkOut ? new Date(row.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
-    } else {
+    } else if (row.statusKey==='absent') {
       statusBadge = '<span class="badge sd-absent">⚪ Absent</span>';
+    } else {
+      statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border)">➖ Not Scheduled Today</span>';
     }
     const tr=document.createElement('tr');
     tr.innerHTML = `
