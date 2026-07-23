@@ -265,6 +265,7 @@
     <div class="nav-item" data-page="validity" onclick="showPage('validity')"><span class="icon">📅</span> Validity</div>
     <div class="nav-item" data-page="feedback" onclick="showPage('feedback')"><span class="icon">💬</span> Feedback</div>
     <div class="nav-item" data-page="leaveRequests" onclick="showPage('leaveRequests')"><span class="icon">🌴</span> Leave Requests</div>
+    <div class="nav-item" data-page="facultyLeave" onclick="showPage('facultyLeave')"><span class="icon">🧳</span> Faculty Leave</div>
     <div class="nav-item" data-page="addStudent" onclick="showPage('addStudent')"><span class="icon">➕</span> Add Student</div>
     <div class="nav-section">Faculty</div>
     <div class="nav-item" data-page="facultyAccounts" onclick="showPage('facultyAccounts')"><span class="icon">🧑‍🏫</span> Faculty Accounts</div>
@@ -321,6 +322,7 @@
             <option value="left">✅ Left for the Day</option>
             <option value="absent">⚪ Absent</option>
             <option value="notScheduled">➖ Not Scheduled Today</option>
+            <option value="facultyLeave">🧳 Faculty on Leave</option>
           </select>
           <select id="slotDetailCourseFilter" onchange="renderSlotDetail()"><option value="">All Courses</option></select>
           <select id="slotDetailFacultyFilter" onchange="renderSlotDetail()"><option value="">All Faculty</option></select>
@@ -508,6 +510,48 @@
         <table>
           <thead><tr><th>Requested</th><th>Student</th><th>Course</th><th>Reason</th><th>Faculty Review</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="leaveRequestsTable"><tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FACULTY LEAVE -->
+    <div class="page" id="page-facultyLeave">
+      <div class="page-header">
+        <h1>🧳 Faculty Leave</h1>
+        <button class="btn btn-orange" onclick="toggleAdminFacultyLeaveForm()">+ Add Faculty Leave</button>
+      </div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+        When a faculty leave is <strong>approved</strong>, their students won't be marked absent for those dates —
+        it shows as "Faculty on Leave" instead, in the Streak column, Days Absent stat, and Live Slots.
+        Admin can approve a faculty's own request below, or add one directly (no request needed) if faculty is unavailable
+        without having applied themselves.
+      </p>
+
+      <div class="card" id="adminFacultyLeaveForm" style="display:none;margin-bottom:18px">
+        <div class="search-row">
+          <select id="aflFaculty"><option value="">Select Faculty…</option></select>
+          <input type="date" id="aflFrom" title="From date"/>
+          <input type="date" id="aflTo" title="To date"/>
+        </div>
+        <textarea id="aflReason" rows="2" placeholder="Reason (optional)" style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;color:#fff;padding:9px 12px;font-size:12px;font-family:'Inter',sans-serif;outline:none;margin-top:8px"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-orange btn-sm" onclick="submitAdminFacultyLeave()">Save (auto-approved)</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleAdminFacultyLeaveForm()">Cancel</button>
+        </div>
+      </div>
+
+      <div class="search-row">
+        <select id="flStatusFilter" onchange="renderFacultyLeave()">
+          <option value="pending">⏳ Pending</option>
+          <option value="">All</option>
+          <option value="approved">✅ Approved</option>
+          <option value="rejected">❌ Rejected</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Faculty</th><th>From</th><th>To</th><th>Reason</th><th>Requested By</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="facultyLeaveTable"><tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -741,6 +785,7 @@
           <button class="btn btn-ghost btn-sm" id="tab-info" onclick="switchTab('info')">Info</button>
           <button class="btn btn-ghost btn-sm" id="tab-syllabus" onclick="switchTab('syllabus')">Syllabus</button>
           <button class="btn btn-orange btn-sm" id="tab-att" onclick="switchTab('att')">Attendance</button>
+          <button class="btn btn-ghost btn-sm" id="tab-leave" onclick="switchTab('leave')">Leave History</button>
         </div>
 
         <!-- INFO TAB -->
@@ -833,6 +878,20 @@
             <table>
               <thead><tr><th>Date</th><th>Check In</th><th>Check Out</th><th>Hours</th></tr></thead>
               <tbody id="modalAttTable"><tr><td colspan="4" style="color:var(--text3)">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="tabLeave" style="display:none">
+          <div class="att-summary">
+            <div class="att-stat"><div class="av" id="ms-leave-total">—</div><div class="al">Total Requests</div></div>
+            <div class="att-stat"><div class="av green" id="ms-leave-approved">—</div><div class="al">Approved</div></div>
+            <div class="att-stat"><div class="av red" id="ms-leave-rejected">—</div><div class="al">Rejected</div></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Requested</th><th>Reason</th><th>Status</th></tr></thead>
+              <tbody id="modalLeaveTable"><tr><td colspan="3" style="color:var(--text3)">Loading…</td></tr></tbody>
             </table>
           </div>
         </div>
@@ -1190,6 +1249,7 @@ async function init() {
   populateDropdowns(); // refresh all dropdowns with faculty data
   await loadStudents();
   await loadAttendance();
+  await loadFacultyLeave();
   filterStudents(); // re-render so the Streak column reflects attendance
                      // (it rendered once already inside loadStudents(), before
                      // allAttendance existed, so streaks would've shown as "—")
@@ -1590,7 +1650,7 @@ function getStudentStreakInfo(s) {
   if (!baseTs) return '<span style="color:var(--text3);font-size:11px">—</span>';
 
   const baseDate = new Date(baseTs.seconds * 1000);
-  const missed = scheduledDaysMissed(baseDate, s.attendanceDays);
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, getFacultyLeaveRanges(s.faculty));
   const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   if (missed === 0) {
@@ -2179,6 +2239,153 @@ async function rejectLeaveRequest(requestId) {
 }
 window.rejectLeaveRequest = rejectLeaveRequest;
 
+// ── FACULTY LEAVE ──
+// Separate from student leave requests. A faculty leave record, once APPROVED, means: for
+// those dates, that faculty's students should not be counted absent — it wasn't their fault
+// the faculty wasn't there. Faculty can request their own leave (faculty.html); admin can
+// also add one directly for a faculty who didn't request it themselves (e.g. an emergency),
+// which is saved as already-approved since admin is the authority either way.
+let allFacultyLeave = [];
+
+async function loadFacultyLeave() {
+  try {
+    const snap = await getDocs(collection(db,'cadd_faculty_leave'));
+    allFacultyLeave = snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch(e) {
+    console.error('Faculty leave load error:', e);
+    allFacultyLeave = [];
+  }
+}
+
+// Returns approved leave date-ranges (as Date pairs) for one faculty — used to exclude
+// those days from absence calculations everywhere (streak, Days Absent stat, Live Slots).
+function getFacultyLeaveRanges(facultyDocId) {
+  if (!facultyDocId) return [];
+  return allFacultyLeave
+    .filter(f => f.facultyDocId === facultyDocId && f.status === 'approved')
+    .map(f => ({ from: new Date(f.dateFrom+'T00:00:00'), to: new Date(f.dateTo+'T23:59:59') }));
+}
+function isDateInLeaveRanges(date, ranges) {
+  return ranges.some(r => date >= r.from && date <= r.to);
+}
+
+function populateAdminFacultyLeaveDropdown() {
+  const sel = document.getElementById('aflFaculty');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select Faculty…</option>' + allFaculty
+    .filter(f => f.status !== 'deactivated')
+    .map(f => `<option value="${f.docId}">${f.name}</option>`).join('');
+  sel.value = cur;
+}
+window.populateAdminFacultyLeaveDropdown = populateAdminFacultyLeaveDropdown;
+
+function toggleAdminFacultyLeaveForm() {
+  const el = document.getElementById('adminFacultyLeaveForm');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleAdminFacultyLeaveForm = toggleAdminFacultyLeaveForm;
+
+async function submitAdminFacultyLeave() {
+  const facultyDocId = document.getElementById('aflFaculty').value;
+  const dateFrom = document.getElementById('aflFrom').value;
+  const dateTo = document.getElementById('aflTo').value;
+  const reason = document.getElementById('aflReason').value.trim();
+  if (!facultyDocId) { showToast('Select a faculty', 'error'); return; }
+  if (!dateFrom || !dateTo) { showToast('Pick both dates', 'error'); return; }
+  if (dateTo < dateFrom) { showToast('"To" date is before "From" date', 'error'); return; }
+  const faculty = allFaculty.find(f=>f.docId===facultyDocId);
+  try {
+    await addDoc(collection(db,'cadd_faculty_leave'), {
+      facultyDocId, facultyName: faculty ? faculty.name : '—',
+      dateFrom, dateTo, reason,
+      status: 'approved', // admin-added leave is authoritative immediately — no separate approval step
+      requestedBy: 'admin',
+      requestedAt: Timestamp.now(),
+      reviewedAt: Timestamp.now()
+    });
+    showToast('Faculty leave added and approved', 'success');
+    document.getElementById('aflFaculty').value='';
+    document.getElementById('aflFrom').value='';
+    document.getElementById('aflTo').value='';
+    document.getElementById('aflReason').value='';
+    toggleAdminFacultyLeaveForm();
+    await loadFacultyLeave();
+    renderFacultyLeave();
+    filterStudents(); // refresh streak column with new leave-excluded days
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.submitAdminFacultyLeave = submitAdminFacultyLeave;
+
+async function loadFacultyLeavePage() {
+  await loadFacultyLeave();
+  renderFacultyLeave();
+}
+window.loadFacultyLeavePage = loadFacultyLeavePage;
+
+function renderFacultyLeave() {
+  const tb = document.getElementById('facultyLeaveTable');
+  const statusFilter = document.getElementById('flStatusFilter').value;
+  const list = allFacultyLeave
+    .filter(r => !statusFilter || r.status === statusFilter)
+    .sort((a,b)=>(b.requestedAt?.seconds||0)-(a.requestedAt?.seconds||0));
+
+  if (!list.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No faculty leave records found.</td></tr>';
+    return;
+  }
+
+  tb.innerHTML = '';
+  list.forEach(r=>{
+    let statusHtml, actionsHtml = '—';
+    if (r.status === 'pending') {
+      statusHtml = '<span style="color:#F0C040;font-weight:600">⏳ Pending</span>';
+      actionsHtml = `
+        <button class="btn btn-green btn-sm" onclick="approveFacultyLeave('${r.id}')">✅ Approve</button>
+        <button class="btn btn-red btn-sm" onclick="rejectFacultyLeave('${r.id}')">✕ Reject</button>`;
+    } else if (r.status === 'approved') {
+      statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
+    } else {
+      statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.facultyName||'—'}</td>
+      <td style="font-size:12px">${r.dateFrom||'—'}</td>
+      <td style="font-size:12px">${r.dateTo||'—'}</td>
+      <td style="max-width:220px;white-space:normal;font-size:12px;color:var(--text2)">${(r.reason||'—').replace(/</g,'&lt;')}</td>
+      <td style="font-size:12px;color:var(--text2)">${r.requestedBy==='admin'?'Admin':'Faculty'}</td>
+      <td style="font-size:12px">${statusHtml}</td>
+      <td style="display:flex;gap:6px">${actionsHtml}</td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderFacultyLeave = renderFacultyLeave;
+
+async function approveFacultyLeave(id) {
+  if (!confirm('Approve this faculty leave? Their students will not be marked absent for these dates.')) return;
+  try {
+    await updateDoc(doc(db,'cadd_faculty_leave',id), { status:'approved', reviewedAt: Timestamp.now() });
+    const r = allFacultyLeave.find(x=>x.id===id);
+    if (r) { r.status='approved'; r.reviewedAt=Timestamp.now(); }
+    showToast('Faculty leave approved', 'success');
+    renderFacultyLeave();
+    filterStudents(); // refresh streak column
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.approveFacultyLeave = approveFacultyLeave;
+
+async function rejectFacultyLeave(id) {
+  if (!confirm('Reject this faculty leave request?')) return;
+  try {
+    await updateDoc(doc(db,'cadd_faculty_leave',id), { status:'rejected', reviewedAt: Timestamp.now() });
+    const r = allFacultyLeave.find(x=>x.id===id);
+    if (r) { r.status='rejected'; r.reviewedAt=Timestamp.now(); }
+    showToast('Faculty leave rejected', 'success');
+    renderFacultyLeave();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.rejectFacultyLeave = rejectFacultyLeave;
+
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
   if(!list.length){tb.innerHTML='<tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
@@ -2434,6 +2641,48 @@ async function openStudentModal(docId) {
   document.getElementById('studentModal').style.display='flex';
   switchTab('att');
   await loadModalAttendance(docId, s);
+  await loadModalLeaveHistory(docId);
+}
+
+// Shows this student's full leave request history (count of approved/rejected/pending +
+// a chronological list with reason), so admin can answer "how many leaves has this student
+// taken, and why" without digging through the separate Leave Requests page.
+async function loadModalLeaveHistory(docId) {
+  const tb = document.getElementById('modalLeaveTable');
+  tb.innerHTML = '<tr><td colspan="3" style="color:var(--text3)">Loading…</td></tr>';
+  try {
+    const q = query(collection(db,'cadd_leave_requests'), where('studentDocId','==',docId));
+    const snap = await getDocs(q);
+    const list = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.requestedAt?.seconds||0)-(a.requestedAt?.seconds||0));
+
+    const approved = list.filter(r=>r.status==='approved').length;
+    const rejected = list.filter(r=>r.status==='rejected').length;
+    document.getElementById('ms-leave-total').textContent = list.length;
+    document.getElementById('ms-leave-approved').textContent = approved;
+    document.getElementById('ms-leave-rejected').textContent = rejected;
+
+    if (!list.length) {
+      tb.innerHTML = '<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:16px">No leave requests from this student yet.</td></tr>';
+      return;
+    }
+    tb.innerHTML = '';
+    list.forEach(r=>{
+      const dateLabel = r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+      let statusHtml;
+      if (r.status==='approved') statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
+      else if (r.status==='rejected') statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
+      else statusHtml = '<span style="color:#F0C040;font-weight:600">⏳ Pending</span>';
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-size:12px">${dateLabel}</td>
+        <td style="max-width:260px;white-space:normal;font-size:12px;color:var(--text2)">${(r.reason||'—').replace(/</g,'&lt;')}</td>
+        <td style="font-size:12px">${statusHtml}</td>`;
+      tb.appendChild(tr);
+    });
+  } catch(e) {
+    console.error('Modal leave history error:', e);
+    tb.innerHTML = `<tr><td colspan="3" style="color:var(--red);text-align:center;padding:16px">Error loading: ${e.message}</td></tr>`;
+  }
 }
 
 // ── SYLLABUS PROGRESS ──
@@ -2617,16 +2866,19 @@ window.resendWelcomeEmailForCurrentStudent = resendWelcomeEmailForCurrentStudent
 // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
 // don't count against a Mon-Thu student). If a student has no attendanceDays configured,
 // falls back to counting every calendar day so nothing breaks silently.
+// leaveRanges (optional): approved faculty-leave date ranges for this student's faculty —
+// those days are skipped too, since it isn't the student's fault their faculty wasn't there.
 // Shared by the absence-reminder check and the "Streak" column on the Students page.
-function scheduledDaysMissed(fromDate, attendanceDays) {
+function scheduledDaysMissed(fromDate, attendanceDays, leaveRanges) {
   const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+  const ranges = leaveRanges || [];
   const now = new Date();
   let missed = 0;
   const cursor = new Date(fromDate); cursor.setHours(0,0,0,0);
   const today = new Date(now); today.setHours(0,0,0,0);
   cursor.setDate(cursor.getDate()+1); // start counting from the day AFTER their last attendance
   while (cursor <= today) {
-    if (!days.length || days.includes(cursor.getDay())) missed++;
+    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges)) missed++;
     cursor.setDate(cursor.getDate()+1);
   }
   return missed;
@@ -2708,10 +2960,11 @@ async function loadModalAttendance(docId, s) {
   // Sun/Mon/Tue/Thu in between.
   const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
   const today0 = new Date(); today0.setHours(0,0,0,0);
+  const facultyLeaveRanges = getFacultyLeaveRanges(s.faculty);
   let totalScheduledDays = 0;
   { const cursor = new Date(admDate);
     while (cursor <= today0) {
-      if (!schedDays.length || schedDays.includes(cursor.getDay())) totalScheduledDays++;
+      if ((!schedDays.length || schedDays.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, facultyLeaveRanges)) totalScheduledDays++;
       cursor.setDate(cursor.getDate()+1);
     }
   }
@@ -3185,8 +3438,9 @@ async function loadLiveSlots() {
     });
 
     liveSlotsData = {};
-    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[] }; });
+    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[], facultyLeave:[] }; });
 
+    const today0ForSlots = new Date(); today0ForSlots.setHours(0,0,0,0);
     activeStudents.forEach(s=>{
       const slotName = s.slot || 'Unassigned';
       // Schedule-aware, same logic as the attendance-fix elsewhere: only students actually
@@ -3195,10 +3449,14 @@ async function loadLiveSlots() {
       const scheduledToday = !schedDays.length || schedDays.includes(todayDow);
       const rec = recByStudent[s.docId];
       const entry = { student: s, record: rec || null };
+      const facultyOnLeaveToday = isDateInLeaveRanges(today0ForSlots, getFacultyLeaveRanges(s.faculty));
       if (rec && !rec.checkOut) {
         liveSlotsData[slotName].present.push(entry);
       } else if (rec && rec.checkOut) {
         liveSlotsData[slotName].left.push(entry);
+      } else if (scheduledToday && facultyOnLeaveToday) {
+        // Faculty wasn't available today — not the student's fault, don't count as absent.
+        liveSlotsData[slotName].facultyLeave.push(entry);
       } else if (scheduledToday) {
         liveSlotsData[slotName].absent.push(entry);
       } else {
@@ -3213,13 +3471,13 @@ async function loadLiveSlots() {
 
     allSlotNames.forEach(sn=>{
       const d = liveSlotsData[sn];
-      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length;
+      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length + d.facultyLeave.length;
       const div=document.createElement('div');
       div.className='slot-card';
       div.id='slot-card-'+cssSafe(sn);
       div.onclick=()=>showSlotDetail(sn);
       div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">active now · ${totalInSlot} total in slot</div>
-        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span></div>`;
+        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span>${d.facultyLeave.length ? `<span>🧳 ${d.facultyLeave.length}</span>` : ''}</div>`;
       grid.appendChild(div);
     });
   } catch(e) {
@@ -3261,7 +3519,7 @@ window.closeSlotDetail = closeSlotDetail;
 
 function populateSlotDetailFilterOptions(slotName) {
   const d = liveSlotsData[slotName]; if (!d) return;
-  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled];
+  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled, ...d.facultyLeave];
   const courses = new Set(all.map(e=>e.student.course).filter(Boolean));
   const faculties = new Set(all.map(e=>e.student.faculty).filter(Boolean));
   const courseSel = document.getElementById('slotDetailCourseFilter');
@@ -3292,6 +3550,7 @@ function renderSlotDetail() {
   d.left.forEach(e=>rows.push({...e, statusKey:'left'}));
   d.absent.forEach(e=>rows.push({...e, statusKey:'absent'}));
   d.notScheduled.forEach(e=>rows.push({...e, statusKey:'notScheduled'}));
+  d.facultyLeave.forEach(e=>rows.push({...e, statusKey:'facultyLeave'}));
 
   rows = rows.filter(row => {
     const s = row.student;
@@ -3307,7 +3566,7 @@ function renderSlotDetail() {
     return;
   }
 
-  const order = { present:0, left:1, absent:2, notScheduled:3 };
+  const order = { present:0, left:1, absent:2, facultyLeave:3, notScheduled:4 };
   rows.sort((a,b)=> order[a.statusKey]-order[b.statusKey] || (a.student.name||'').localeCompare(b.student.name||''));
 
   tb.innerHTML='';
@@ -3327,6 +3586,8 @@ function renderSlotDetail() {
       coTime = row.record.checkOut ? new Date(row.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
     } else if (row.statusKey==='absent') {
       statusBadge = '<span class="badge sd-absent">⚪ Absent</span>';
+    } else if (row.statusKey==='facultyLeave') {
+      statusBadge = '<span class="badge" style="background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3)">🧳 Faculty on Leave</span>';
     } else {
       statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border)">➖ Not Scheduled Today</span>';
     }
@@ -3356,15 +3617,18 @@ function showPage(id) {
   if(id==='validity') renderValidityPanel();
   if(id==='feedback') loadFeedback();
   if(id==='leaveRequests') loadLeaveRequests();
+  if(id==='facultyLeave') { populateAdminFacultyLeaveDropdown(); loadFacultyLeavePage(); }
 }
 
 function switchTab(tab) {
   document.getElementById('tabInfo').style.display=tab==='info'?'block':'none';
   document.getElementById('tabSyllabus').style.display=tab==='syllabus'?'block':'none';
   document.getElementById('tabAtt').style.display=tab==='att'?'block':'none';
+  document.getElementById('tabLeave').style.display=tab==='leave'?'block':'none';
   document.getElementById('tab-info').className='btn btn-'+(tab==='info'?'orange':'ghost')+' btn-sm';
   document.getElementById('tab-syllabus').className='btn btn-'+(tab==='syllabus'?'orange':'ghost')+' btn-sm';
   document.getElementById('tab-att').className='btn btn-'+(tab==='att'?'orange':'ghost')+' btn-sm';
+  document.getElementById('tab-leave').className='btn btn-'+(tab==='leave'?'orange':'ghost')+' btn-sm';
 }
 
 function viewFullComment(studentName, text) {
