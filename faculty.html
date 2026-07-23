@@ -223,6 +223,7 @@
     <button class="tab-btn" id="tab-attlog" onclick="switchFacTab('attlog')">📅 Attendance Log</button>
     <button class="tab-btn" id="tab-feedback" onclick="switchFacTab('feedback')">💬 Feedback</button>
     <button class="tab-btn" id="tab-leave" onclick="switchFacTab('leave')">🌴 Leave Requests</button>
+    <button class="tab-btn" id="tab-myleave" onclick="switchFacTab('myleave')">🧳 My Leave</button>
   </div>
 
   <!-- ATTENDANCE LOG TAB (this faculty's own students only) -->
@@ -266,6 +267,23 @@
     <div id="leaveFacList"><div class="empty-state"><div class="icon">🌴</div>Loading…</div></div>
   </div>
 
+  <!-- MY LEAVE TAB (faculty's own leave applications) -->
+  <div id="facTabMyLeave" style="display:none">
+    <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+      Apply for your own leave here. Once admin approves it, your students won't be marked absent for these dates —
+      it'll show as "Faculty on Leave" instead.
+    </p>
+    <div class="card" style="margin-bottom:18px">
+      <div class="search-row">
+        <input type="date" id="myLeaveFrom" title="From date"/>
+        <input type="date" id="myLeaveTo" title="To date"/>
+      </div>
+      <textarea id="myLeaveReason" rows="2" placeholder="Reason (optional)" style="width:100%;background:var(--darker);border:1px solid var(--border);border-radius:8px;color:#fff;padding:9px 12px;font-size:12px;font-family:'Inter',sans-serif;outline:none;margin-top:8px"></textarea>
+      <button class="btn btn-orange" style="margin-top:10px" onclick="submitMyLeaveRequest()">Apply for Leave</button>
+    </div>
+    <div id="myLeaveList"><div class="empty-state"><div class="icon">🧳</div>Loading…</div></div>
+  </div>
+
 
   <!-- LIVE NOW TAB -->
   <div id="facTabLive" style="display:none">
@@ -304,7 +322,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getFirestore, collection, doc, getDoc, getDocs, updateDoc,
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, updateDoc,
   query, where, orderBy, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
@@ -332,19 +350,44 @@ let currentFaculty = null;
 let myStudents = [];
 let detailStudentId = null;
 let facAttendance = [];
+let allFacultyLeave = []; // approved/pending/rejected leave records across all faculty (small collection, fetched whole)
+
+// Fetches all faculty leave records once at login, so streak calculations below can exclude
+// any day a student's faculty was on approved leave — mirrors admin.html's identical logic.
+async function loadFacultyLeaveForStreaks() {
+  try {
+    const snap = await getDocs(collection(db, 'cadd_faculty_leave'));
+    allFacultyLeave = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    console.error('Faculty leave fetch error:', e);
+    allFacultyLeave = [];
+  }
+}
+function getFacultyLeaveRanges(facultyDocId) {
+  if (!facultyDocId) return [];
+  return allFacultyLeave
+    .filter(f => f.facultyDocId === facultyDocId && f.status === 'approved')
+    .map(f => ({ from: new Date(f.dateFrom + 'T00:00:00'), to: new Date(f.dateTo + 'T23:59:59') }));
+}
+function isDateInLeaveRanges(date, ranges) {
+  return ranges.some(r => date >= r.from && date <= r.to);
+}
 
 // Counts how many of a student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
 // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
 // don't count against a Mon-Thu student). Mirrors the identical helper in admin.html so
 // this Streak column and the absence-reminder emails always agree with each other.
-function scheduledDaysMissed(fromDate, attendanceDays) {
+// leaveRanges (optional): approved faculty-leave dates for this student's faculty — those
+// days are skipped too, since it isn't the student's fault their faculty wasn't available.
+function scheduledDaysMissed(fromDate, attendanceDays, leaveRanges) {
   const days = Array.isArray(attendanceDays) ? attendanceDays.map(Number) : [];
+  const ranges = leaveRanges || [];
   const cursor = new Date(fromDate); cursor.setHours(0, 0, 0, 0);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   cursor.setDate(cursor.getDate() + 1); // start counting the day AFTER their last attendance
   let missed = 0;
   while (cursor <= today) {
-    if (!days.length || days.includes(cursor.getDay())) missed++;
+    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges)) missed++;
     cursor.setDate(cursor.getDate() + 1);
   }
   return missed;
@@ -364,7 +407,7 @@ function getStudentStreakInfo(s) {
   if (!baseTs) return { html: '—', missed: -1 };
 
   const baseDate = new Date(baseTs.seconds * 1000);
-  const missed = scheduledDaysMissed(baseDate, s.attendanceDays);
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, getFacultyLeaveRanges(s.faculty));
   const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   if (missed === 0) {
@@ -472,6 +515,7 @@ async function loadDashboard() {
   });
 
   await fetchFacAttendance(); // needed before renderMyStudents() so the Streak column has data
+  await loadFacultyLeaveForStreaks(); // ditto, so the Streak column excludes approved faculty-leave days
 
   renderStats();
   renderPendingApprovals();
@@ -620,16 +664,19 @@ function switchFacTab(tab) {
   document.getElementById('facTabAttlog').style.display = tab === 'attlog' ? 'block' : 'none';
   document.getElementById('facTabFeedback').style.display = tab === 'feedback' ? 'block' : 'none';
   document.getElementById('facTabLeave').style.display = tab === 'leave' ? 'block' : 'none';
+  document.getElementById('facTabMyLeave').style.display = tab === 'myleave' ? 'block' : 'none';
   document.getElementById('tab-pending').classList.toggle('active', tab === 'pending');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
   document.getElementById('tab-live').classList.toggle('active', tab === 'live');
   document.getElementById('tab-attlog').classList.toggle('active', tab === 'attlog');
   document.getElementById('tab-feedback').classList.toggle('active', tab === 'feedback');
   document.getElementById('tab-leave').classList.toggle('active', tab === 'leave');
+  document.getElementById('tab-myleave').classList.toggle('active', tab === 'myleave');
   if (tab === 'live') loadLiveSlots();
   if (tab === 'attlog') loadFacAttendance();
   if (tab === 'feedback') loadFacFeedback();
   if (tab === 'leave') loadFacLeaveRequests();
+  if (tab === 'myleave') loadMyLeaveRequests();
 }
 
 // ── ATTENDANCE LOG (faculty's own students only) ──
@@ -790,6 +837,71 @@ async function facultyReviewLeaveRequest(requestId, decision) {
   }
 }
 window.facultyReviewLeaveRequest = facultyReviewLeaveRequest;
+
+// ── MY LEAVE (faculty's own leave applications) ──
+async function submitMyLeaveRequest() {
+  const dateFrom = document.getElementById('myLeaveFrom').value;
+  const dateTo = document.getElementById('myLeaveTo').value;
+  const reason = document.getElementById('myLeaveReason').value.trim();
+  if (!dateFrom || !dateTo) { showToast('Pick both dates', 'error'); return; }
+  if (dateTo < dateFrom) { showToast('"To" date is before "From" date', 'error'); return; }
+  try {
+    await addDoc(collection(db, 'cadd_faculty_leave'), {
+      facultyDocId: currentFaculty.docId,
+      facultyName: currentFaculty.name,
+      dateFrom, dateTo, reason,
+      status: 'pending', // faculty-initiated requests need admin approval before they take effect
+      requestedBy: 'faculty',
+      requestedAt: Timestamp.now(),
+      reviewedAt: null
+    });
+    showToast('Leave request submitted — admin will review it', 'success');
+    document.getElementById('myLeaveFrom').value = '';
+    document.getElementById('myLeaveTo').value = '';
+    document.getElementById('myLeaveReason').value = '';
+    await loadMyLeaveRequests();
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+window.submitMyLeaveRequest = submitMyLeaveRequest;
+
+async function loadMyLeaveRequests() {
+  const wrap = document.getElementById('myLeaveList');
+  wrap.innerHTML = '<div class="empty-state"><div class="icon">🧳</div>Loading…</div>';
+  try {
+    const q = query(collection(db, 'cadd_faculty_leave'), where('facultyDocId', '==', currentFaculty.docId));
+    const snap = await getDocs(q);
+    const list = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>(b.requestedAt?.seconds||0)-(a.requestedAt?.seconds||0));
+
+    if (!list.length) {
+      wrap.innerHTML = '<div class="empty-state"><div class="icon">🧳</div>You haven\'t applied for any leave yet.</div>';
+      return;
+    }
+    wrap.innerHTML = '';
+    list.forEach(r => {
+      let statusHtml;
+      if (r.status === 'approved') statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
+      else if (r.status === 'rejected') statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
+      else statusHtml = '<span style="color:var(--yellow);font-weight:600">⏳ Pending</span>';
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.marginBottom = '12px';
+      div.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:600">${r.dateFrom} → ${r.dateTo}</div>
+          <div style="font-size:12px">${statusHtml}</div>
+        </div>
+        ${r.reason ? `<div style="font-size:12px;color:var(--text2)">${r.reason.replace(/</g,'&lt;')}</div>` : ''}
+      `;
+      wrap.appendChild(div);
+    });
+  } catch (e) {
+    console.error('My leave load error:', e);
+    wrap.innerHTML = `<p style="color:var(--red)">Error loading: ${e.message}</p>`;
+  }
+}
+window.loadMyLeaveRequests = loadMyLeaveRequests;
 
 async function fetchFacAttendance() {
   try {
