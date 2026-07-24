@@ -676,6 +676,7 @@
         <p style="color:var(--text-secondary);font-size:13px;line-height:1.6" id="leaveRequestStatusText"></p>
       </div>
       <button class="btn-ghost-full" id="leaveRequestBtn" onclick="openLeaveRequestModal()" style="display:none">Request Leave</button>
+      <button class="btn-primary" id="leaveRevokeBtn" onclick="revokeMyLeave()" style="display:none">I'm Back — End My Leave</button>
     </div>
 
     </div><!-- /stPanelLeave -->
@@ -1383,34 +1384,70 @@ async function loadLeaveRequestStatus() {
     // Single equality query (no composite index needed) — sort client-side.
     const q = query(collection(db, 'cadd_leave_requests'), where('studentDocId', '==', currentStudent.docId));
     const snap = await getDocs(q);
-    const requests = snap.docs.map(d => d.data()).sort((a,b) => b.requestedAt.seconds - a.requestedAt.seconds);
+    const requests = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => b.requestedAt.seconds - a.requestedAt.seconds);
     const latest = requests[0];
+    currentLeaveRequestId = latest ? latest.id : null; // used by revokeMyLeave()
     const statusBox = document.getElementById('leaveRequestStatus');
     const statusText = document.getElementById('leaveRequestStatusText');
     const btn = document.getElementById('leaveRequestBtn');
+    const revokeBtn = document.getElementById('leaveRevokeBtn');
 
     if (latest && latest.status === 'pending') {
       const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
       statusText.textContent = `⏳ Your leave request from ${d} is pending admin review.`;
       statusBox.style.display = 'block';
       btn.style.display = 'none';
+      revokeBtn.style.display = 'none';
+    } else if (latest && latest.status === 'approved') {
+      const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+      statusText.textContent = `✅ Your last leave request (${d}) was approved.`;
+      statusBox.style.display = 'block';
+      btn.style.display = 'none'; // don't offer a new request while one is already active
+      revokeBtn.style.display = 'block'; // "I'm back" — let them end it themselves
     } else {
-      if (latest && (latest.status === 'approved' || latest.status === 'rejected')) {
+      if (latest && latest.status === 'revoked') {
         const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-        statusText.textContent = latest.status === 'approved'
-          ? `✅ Your last leave request (${d}) was approved.`
-          : `Your last leave request (${d}) was not approved.`;
+        statusText.textContent = `Your leave from ${d} was ended early — welcome back!`;
+        statusBox.style.display = 'block';
+      } else if (latest && latest.status === 'rejected') {
+        const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+        statusText.textContent = `Your last leave request (${d}) was not approved.`;
         statusBox.style.display = 'block';
       } else {
         statusBox.style.display = 'none';
       }
       btn.style.display = 'block';
+      revokeBtn.style.display = 'none';
     }
   } catch(e) {
     console.error('Leave request status error:', e);
   }
 }
 window.loadLeaveRequestStatus = loadLeaveRequestStatus;
+
+// Lets a student end their own approved leave early ("I'm back"). No admin approval needed
+// for this direction — going back to active/attending is always fine to self-serve. Sets the
+// leave request to 'revoked' (distinct from 'rejected', so admin can tell them apart) and
+// flips the student's own status back to 'active'.
+let currentLeaveRequestId = null;
+async function revokeMyLeave() {
+  if (!currentLeaveRequestId) return;
+  if (!confirm("End your leave now and mark yourself active again?")) return;
+  const btn = document.getElementById('leaveRevokeBtn');
+  btn.disabled = true; btn.textContent = 'Ending leave…';
+  try {
+    await updateDoc(doc(db, 'cadd_leave_requests', currentLeaveRequestId), { status: 'revoked', revokedAt: Timestamp.now() });
+    await updateDoc(doc(db, 'cadd_students', currentStudent.docId), { status: 'active' });
+    currentStudent.status = 'active';
+    showToast("Welcome back! You're marked active again.", 'success');
+    await loadLeaveRequestStatus();
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = "I'm Back — End My Leave";
+  }
+}
+window.revokeMyLeave = revokeMyLeave;
 
 // ── TOP TABS ──
 function switchStudentTab(tab) {
