@@ -250,6 +250,15 @@
   </div>
   <div class="topbar-right">
     <span id="liveClock2">--:--:--</span>
+    <div style="position:relative">
+      <button onclick="toggleNotificationPanel()" id="notifBellBtn" style="position:relative;background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 12px;font-size:14px;cursor:pointer;font-family:'Inter',sans-serif;">
+        🔔<span id="notifBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:16px;height:16px;line-height:16px;text-align:center;padding:0 3px;">0</span>
+      </button>
+      <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:340px;max-height:420px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:200;">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:13px;font-weight:700;font-family:'Rajdhani',sans-serif;">Pending Tasks</div>
+        <div id="notifList"></div>
+      </div>
+    </div>
     <button onclick="adminLogout()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:'Inter',sans-serif;">Logout</button>
   </div>
 </div>
@@ -374,8 +383,8 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Student ID</th><th>Name</th><th>Course</th><th>Faculty</th><th>Phone</th><th>Slot</th><th>Days</th><th>Status</th><th>Actions</th><th>Streak</th></tr></thead>
-          <tbody id="studentsTable"><tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+          <thead><tr><th>#</th><th>Student ID</th><th>Name</th><th>Course</th><th>Faculty</th><th>Phone</th><th>Slot</th><th>Days</th><th>Status</th><th>Actions</th><th>Streak</th></tr></thead>
+          <tbody id="studentsTable"><tr><td colspan="11" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -1250,10 +1259,12 @@ async function init() {
   await loadStudents();
   await loadAttendance();
   await loadFacultyLeave();
+  await loadLeaveRequests(); // needed here (not just on-page-visit) so the bell has accurate counts from the start
   filterStudents(); // re-render so the Streak column reflects attendance
                      // (it rendered once already inside loadStudents(), before
                      // allAttendance existed, so streaks would've shown as "—")
   await loadOverview();
+  renderNotificationBell();
 }
 
 // ── MODULE PICKER ──
@@ -2179,6 +2190,8 @@ function renderLeaveRequests() {
     return true;
   });
 
+  renderNotificationBell(); // bell reflects allLeaveRequests globally, not just the current filtered view
+
   if (!list.length) {
     tb.innerHTML = '<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No leave requests found.</td></tr>';
     return;
@@ -2195,6 +2208,8 @@ function renderLeaveRequests() {
         <button class="btn btn-red btn-sm" onclick="rejectLeaveRequest('${r.id}')">✕ Reject</button>`;
     } else if (r.status === 'approved') {
       statusHtml = `<span style="color:var(--green);font-weight:600">✅ Approved</span>`;
+    } else if (r.status === 'revoked') {
+      statusHtml = `<span style="color:#7A84FF;font-weight:600">↩️ Ended early by student</span>`;
     } else {
       statusHtml = `<span style="color:var(--red);font-weight:600">❌ Rejected</span>`;
     }
@@ -2329,6 +2344,8 @@ function renderFacultyLeave() {
     .filter(r => !statusFilter || r.status === statusFilter)
     .sort((a,b)=>(b.requestedAt?.seconds||0)-(a.requestedAt?.seconds||0));
 
+  renderNotificationBell(); // bell reflects allFacultyLeave globally, not just the current filtered view
+
   if (!list.length) {
     tb.innerHTML = '<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">No faculty leave records found.</td></tr>';
     return;
@@ -2405,16 +2422,106 @@ async function revokeFacultyLeave(id) {
 }
 window.revokeFacultyLeave = revokeFacultyLeave;
 
+// ── NOTIFICATION BELL ──
+// Pulls "pending admin task" items straight from data already in memory (allLeaveRequests,
+// allFacultyLeave) — no extra Firestore reads. Because it reads live off those arrays, a task
+// disappears from the panel and the badge count drops automatically the moment it's no longer
+// pending (approved/rejected/revoked) — there's nothing separate to "delete", it just stops
+// being pending. Add more sources here later (e.g. other approval queues) by pushing more
+// items into the same list.
+function computePendingNotifications() {
+  const items = [];
+  allLeaveRequests.filter(r => r.status === 'pending').forEach(r => {
+    items.push({
+      key: 'leave-' + r.id,
+      icon: '🌴',
+      title: (r.studentName || 'Student') + ' — Leave Request',
+      subtitle: r.reason ? r.reason.slice(0, 60) : 'No reason given',
+      ts: r.requestedAt ? r.requestedAt.seconds : 0,
+      page: 'leaveRequests'
+    });
+  });
+  allFacultyLeave.filter(r => r.status === 'pending').forEach(r => {
+    items.push({
+      key: 'facleave-' + r.id,
+      icon: '🧳',
+      title: (r.facultyName || 'Faculty') + ' — Leave Request',
+      subtitle: `${r.dateFrom || '?'} → ${r.dateTo || '?'}`,
+      ts: r.requestedAt ? r.requestedAt.seconds : 0,
+      page: 'facultyLeave'
+    });
+  });
+  items.sort((a, b) => b.ts - a.ts); // newest first
+  return items;
+}
+
+function renderNotificationBell() {
+  const items = computePendingNotifications();
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return; // bell not in DOM yet (e.g. called before login)
+  if (items.length) {
+    badge.style.display = 'block';
+    badge.textContent = items.length > 99 ? '99+' : items.length;
+  } else {
+    badge.style.display = 'none';
+  }
+
+  const list = document.getElementById('notifList');
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = '<div style="padding:24px 14px;text-align:center;color:var(--text3);font-size:12px">🎉 Nothing pending</div>';
+    return;
+  }
+  list.innerHTML = '';
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.onclick = () => goToNotification(item.page);
+    div.style.cssText = 'padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;gap:10px;align-items:flex-start;';
+    div.onmouseenter = () => div.style.background = 'rgba(255,255,255,0.03)';
+    div.onmouseleave = () => div.style.background = 'transparent';
+    div.innerHTML = `
+      <span style="font-size:16px">${item.icon}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:12.5px;font-weight:600;color:var(--text)">${item.title}</span>
+        <span style="display:block;font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.subtitle}</span>
+      </span>`;
+    list.appendChild(div);
+  });
+}
+window.renderNotificationBell = renderNotificationBell;
+
+function toggleNotificationPanel() {
+  const panel = document.getElementById('notifPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+window.toggleNotificationPanel = toggleNotificationPanel;
+
+function goToNotification(page) {
+  document.getElementById('notifPanel').style.display = 'none';
+  showPage(page);
+}
+window.goToNotification = goToNotification;
+
+// Close the panel when clicking anywhere outside the bell/dropdown
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('notifPanel');
+  const btn = document.getElementById('notifBellBtn');
+  if (!panel || panel.style.display === 'none') return;
+  if (panel.contains(e.target) || btn.contains(e.target)) return;
+  panel.style.display = 'none';
+});
+
 function renderStudents(list) {
   const tb=document.getElementById('studentsTable'); tb.innerHTML='';
-  if(!list.length){tb.innerHTML='<tr><td colspan="10" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
+  if(!list.length){tb.innerHTML='<tr><td colspan="11" style="color:var(--text3);text-align:center;padding:20px">No students found.</td></tr>';return;}
   const shortDays=['S','M','T','W','T','F','S'];
-  list.forEach(s=>{
+  list.forEach((s,idx)=>{
     const daysStr = (s.attendanceDays && s.attendanceDays.length)
       ? s.attendanceDays.map(d=>shortDays[d]).join('')
       : '—';
     const tr=document.createElement('tr');
     tr.innerHTML=`
+      <td style="color:var(--text3);font-size:12px">${idx+1}</td>
       <td><code style="color:var(--orange);font-size:12px">${s.studentId||'—'}</code></td>
       <td>${s.name||'—'}</td>
       <td>${s.course||'—'}</td>
@@ -2690,6 +2797,7 @@ async function loadModalLeaveHistory(docId) {
       let statusHtml;
       if (r.status==='approved') statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
       else if (r.status==='rejected') statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
+      else if (r.status==='revoked') statusHtml = '<span style="color:#7A84FF;font-weight:600">↩️ Ended early by student</span>';
       else statusHtml = '<span style="color:#F0C040;font-weight:600">⏳ Pending</span>';
       const tr = document.createElement('tr');
       tr.innerHTML = `
