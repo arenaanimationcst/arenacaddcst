@@ -248,6 +248,7 @@
     .streak-day.today-present { background:rgba(244,121,32,0.2); color:var(--cadd-orange); border:2px solid var(--cadd-orange); }
     .streak-day.today-absent { background:rgba(255,255,255,0.04); color:var(--text-muted); border:2px solid var(--cadd-orange); }
     .streak-day.not-scheduled { background:transparent; color:var(--text-muted); border:1px dashed rgba(255,255,255,0.08); opacity:0.4; }
+    .streak-day.on-leave { background:rgba(122,132,255,0.15); color:#7A84FF; border:1px solid rgba(122,132,255,0.3); }
 
     /* History */
     .history-card { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:var(--radius); overflow:hidden; }
@@ -691,6 +692,23 @@
   <div class="leave-modal">
     <h3>Request Leave</h3>
     <p>Let the institute know why you'll be away. Admin will review this and update your status.</p>
+
+    <p style="font-size:11.5px;color:var(--text-muted);background:rgba(244,121,32,0.08);border:1px solid rgba(244,121,32,0.2);border-radius:8px;padding:8px 10px;margin:10px 0">
+      📅 For a single day, pick the <strong>same date</strong> in both fields. For more than one day, pick your start date in "From" and your last day in "To".
+    </p>
+
+    <div style="display:flex;gap:10px;margin-bottom:4px">
+      <div style="flex:1">
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">From</label>
+        <input type="date" id="leaveFromInput" style="width:100%;background:var(--card);border:1px solid var(--cadd-border);border-radius:8px;color:#fff;padding:9px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none"/>
+      </div>
+      <div style="flex:1">
+        <label style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:4px">To</label>
+        <input type="date" id="leaveToInput" style="width:100%;background:var(--card);border:1px solid var(--cadd-border);border-radius:8px;color:#fff;padding:9px 10px;font-size:13px;font-family:'Inter',sans-serif;outline:none"/>
+      </div>
+    </div>
+    <div id="leaveDurationLabel" style="font-size:11.5px;color:var(--cadd-orange);font-weight:600;margin-bottom:12px;min-height:16px"></div>
+
     <textarea class="fb-comment-box" id="leaveReasonInput" rows="4" maxlength="500" placeholder="Reason for leave…"></textarea>
     <div class="fb-char-count"><span id="leaveReasonCount">0</span>/500</div>
     <div style="display:flex;gap:10px;margin-top:16px">
@@ -1340,9 +1358,27 @@ if (leaveReasonEl) leaveReasonEl.addEventListener('input', () => {
   document.getElementById('leaveReasonCount').textContent = leaveReasonEl.value.length;
 });
 
+function updateLeaveDurationLabel() {
+  const fromVal = document.getElementById('leaveFromInput').value;
+  const toVal = document.getElementById('leaveToInput').value;
+  const label = document.getElementById('leaveDurationLabel');
+  if (!fromVal || !toVal) { label.textContent = ''; return; }
+  if (toVal < fromVal) { label.textContent = '⚠️ "To" date is before "From" date'; return; }
+  const days = Math.round((new Date(toVal) - new Date(fromVal)) / 86400000) + 1;
+  label.textContent = days === 1 ? '📆 1 day leave' : `📆 ${days} day leave`;
+}
+['leaveFromInput','leaveToInput'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateLeaveDurationLabel);
+});
+
 function openLeaveRequestModal() {
   document.getElementById('leaveReasonInput').value = '';
   document.getElementById('leaveReasonCount').textContent = '0';
+  const todayStr = new Date().toISOString().slice(0,10);
+  document.getElementById('leaveFromInput').value = todayStr;
+  document.getElementById('leaveToInput').value = todayStr;
+  updateLeaveDurationLabel();
   document.getElementById('leaveRequestModalOverlay').classList.add('show');
 }
 window.openLeaveRequestModal = openLeaveRequestModal;
@@ -1354,7 +1390,11 @@ window.closeLeaveRequestModal = closeLeaveRequestModal;
 
 async function submitLeaveRequest() {
   const reason = document.getElementById('leaveReasonInput').value.trim();
+  const dateFrom = document.getElementById('leaveFromInput').value;
+  const dateTo = document.getElementById('leaveToInput').value;
   if (!reason) { showToast('Please add a reason for your leave', 'error'); return; }
+  if (!dateFrom || !dateTo) { showToast('Pick both dates', 'error'); return; }
+  if (dateTo < dateFrom) { showToast('"To" date is before "From" date', 'error'); return; }
   const btn = document.getElementById('leaveSubmitBtn');
   btn.disabled = true; btn.textContent = 'Submitting…';
   try {
@@ -1364,6 +1404,7 @@ async function submitLeaveRequest() {
       studentIdDisplay: currentStudent.studentId,
       course: currentStudent.course || '',
       reason,
+      dateFrom, dateTo,
       status: 'pending',
       requestedAt: Timestamp.now(),
       reviewedAt: null
@@ -1393,25 +1434,25 @@ async function loadLeaveRequestStatus() {
     const revokeBtn = document.getElementById('leaveRevokeBtn');
 
     if (latest && latest.status === 'pending') {
-      const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-      statusText.textContent = `⏳ Your leave request from ${d} is pending admin review.`;
+      const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+      statusText.textContent = `⏳ Your leave request (${range}) is pending admin review.`;
       statusBox.style.display = 'block';
       btn.style.display = 'none';
       revokeBtn.style.display = 'none';
     } else if (latest && latest.status === 'approved') {
-      const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-      statusText.textContent = `✅ Your last leave request (${d}) was approved.`;
+      const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+      statusText.textContent = `✅ Your leave (${range}) was approved.`;
       statusBox.style.display = 'block';
       btn.style.display = 'none'; // don't offer a new request while one is already active
       revokeBtn.style.display = 'block'; // "I'm back" — let them end it themselves
     } else {
       if (latest && latest.status === 'revoked') {
-        const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-        statusText.textContent = `Your leave from ${d} was ended early — welcome back!`;
+        const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+        statusText.textContent = `Your leave (${range}) was ended early — welcome back!`;
         statusBox.style.display = 'block';
       } else if (latest && latest.status === 'rejected') {
-        const d = new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-        statusText.textContent = `Your last leave request (${d}) was not approved.`;
+        const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+        statusText.textContent = `Your leave request (${range}) was not approved.`;
         statusBox.style.display = 'block';
       } else {
         statusBox.style.display = 'none';
@@ -1680,6 +1721,19 @@ async function loadStats() {
     presentDays.add(new Date(r.checkIn.seconds*1000).toDateString());
   });
 
+  // Own approved leave date-ranges — days inside these don't count as "absent"; they show
+  // as "on leave" instead, both in the stat and in the streak strip below.
+  let myLeaveRanges = [];
+  try {
+    const lq = query(collection(db,'cadd_leave_requests'), where('studentDocId','==',currentStudent.docId));
+    const lsnap = await getDocs(lq);
+    myLeaveRanges = lsnap.docs
+      .map(d => d.data())
+      .filter(r => r.status === 'approved' && r.dateFrom && r.dateTo)
+      .map(r => ({ from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') }));
+  } catch(e) { console.error('Own leave ranges fetch error:', e); }
+  const isOnLeave = (d) => myLeaveRanges.some(r => d >= r.from && d <= r.to);
+
   // Uses trackingStartDate (when THIS app started tracking them) rather than admissionDate
   // (their real-world join date, which could predate this app and inflate "days absent" —
   // same fix as the admin panel's student-detail modal).
@@ -1697,7 +1751,7 @@ async function loadStats() {
   let totalScheduledDays = 0;
   { const cursor = new Date(baseDate);
     while (cursor <= today0) {
-      if (!scheduledDays.length || scheduledDays.includes(cursor.getDay())) totalScheduledDays++;
+      if ((!scheduledDays.length || scheduledDays.includes(cursor.getDay())) && !isOnLeave(cursor)) totalScheduledDays++;
       cursor.setDate(cursor.getDate()+1);
     }
   }
@@ -1715,7 +1769,9 @@ async function loadStats() {
     const isScheduled = !scheduledDays.length || scheduledDays.includes(d.getDay());
     const isPresent=presentDays.has(d.toDateString()), isToday=i===0;
     const div=document.createElement('div');
-    if (!isScheduled) {
+    if (isScheduled && !isPresent && isOnLeave(d)) {
+      div.className='streak-day on-leave';
+    } else if (!isScheduled) {
       div.className='streak-day not-scheduled';
     } else {
       div.className='streak-day '+(isToday?(isPresent?'today-present':'today-absent'):(isPresent?'present':'absent'));
