@@ -373,6 +373,26 @@ function isDateInLeaveRanges(date, ranges) {
   return ranges.some(r => date >= r.from && date <= r.to);
 }
 
+// Own-students' approved leave requests — fetched once at login, same pattern as faculty
+// leave, so the Streak column also excludes a student's own approved leave days (not just
+// faculty-leave days).
+let allStudentLeaveForStreaks = [];
+async function loadStudentLeaveForStreaks() {
+  try {
+    const snap = await getDocs(collection(db, 'cadd_leave_requests'));
+    allStudentLeaveForStreaks = snap.docs.map(d => d.data());
+  } catch (e) {
+    console.error('Student leave fetch error:', e);
+    allStudentLeaveForStreaks = [];
+  }
+}
+function getStudentLeaveRanges(studentDocId) {
+  if (!studentDocId) return [];
+  return allStudentLeaveForStreaks
+    .filter(r => r.studentDocId === studentDocId && r.status === 'approved' && r.dateFrom && r.dateTo)
+    .map(r => ({ from: new Date(r.dateFrom + 'T00:00:00'), to: new Date(r.dateTo + 'T23:59:59') }));
+}
+
 // Counts how many of a student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
 // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
 // don't count against a Mon-Thu student). Mirrors the identical helper in admin.html so
@@ -407,7 +427,7 @@ function getStudentStreakInfo(s) {
   if (!baseTs) return { html: '—', missed: -1 };
 
   const baseDate = new Date(baseTs.seconds * 1000);
-  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, getFacultyLeaveRanges(s.faculty));
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, [...getFacultyLeaveRanges(s.faculty), ...getStudentLeaveRanges(s.docId)]);
   const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   if (missed === 0) {
@@ -516,6 +536,7 @@ async function loadDashboard() {
 
   await fetchFacAttendance(); // needed before renderMyStudents() so the Streak column has data
   await loadFacultyLeaveForStreaks(); // ditto, so the Streak column excludes approved faculty-leave days
+  await loadStudentLeaveForStreaks(); // ditto, so it also excludes each student's own approved leave days
 
   renderStats();
   renderPendingApprovals();
@@ -779,6 +800,7 @@ function renderFacLeaveRequests() {
     const appliedLabel = r.requestedAt
       ? new Date(r.requestedAt.seconds * 1000).toLocaleString('en-IN', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
       : '—';
+    const rangeLabel = r.dateFrom ? (r.dateFrom === r.dateTo ? r.dateFrom : `${r.dateFrom} → ${r.dateTo}`) : null;
 
     let adminStatusHtml;
     if (r.status === 'approved') adminStatusHtml = `<span style="color:var(--green);font-weight:600">✅ Approved by admin</span>`;
@@ -801,7 +823,7 @@ function renderFacLeaveRequests() {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;flex-wrap:wrap">
         <div>
           <div style="font-size:14px;font-weight:600">${r.studentName || '—'}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:2px">${r.course || '—'} · Applied ${appliedLabel}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${r.course || '—'}${rangeLabel ? ' · Leave: ' + rangeLabel : ''} · Applied ${appliedLabel}</div>
         </div>
         <div style="font-size:12px">${adminStatusHtml}</div>
       </div>
