@@ -2208,8 +2208,10 @@ function renderLeaveRequests() {
         <button class="btn btn-red btn-sm" onclick="rejectLeaveRequest('${r.id}')">✕ Reject</button>`;
     } else if (r.status === 'approved') {
       statusHtml = `<span style="color:var(--green);font-weight:600">✅ Approved</span>`;
+      actionsHtml = `<button class="btn btn-red btn-sm" onclick="adminRevokeStudentLeave('${r.id}','${r.studentDocId}')">↩️ Revoke</button>`;
     } else if (r.status === 'revoked') {
       statusHtml = `<span style="color:#7A84FF;font-weight:600">↩️ Ended early by student</span>`;
+      actionsHtml = `<button class="btn btn-green btn-sm" onclick="restoreStudentLeave('${r.id}','${r.studentDocId}')">Restore to Approved</button>`;
     } else {
       statusHtml = `<span style="color:var(--red);font-weight:600">❌ Rejected</span>`;
     }
@@ -2253,6 +2255,45 @@ async function rejectLeaveRequest(requestId) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.rejectLeaveRequest = rejectLeaveRequest;
+
+// Admin-side equivalent of the student's own "I'm Back — End My Leave" button in index.html —
+// same effect, for cases where admin needs to end it on the student's behalf (student can't
+// access the app, lost their password, etc). Sets the request to 'revoked' (distinct from
+// 'rejected', so it's clear this was an approved leave ended early, not a denial) and flips
+// the student's own status back to 'active'.
+async function adminRevokeStudentLeave(requestId, studentDocId) {
+  if (!confirm('End this student\'s leave now and mark them "Active" again?')) return;
+  try {
+    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'revoked', revokedAt: Timestamp.now() });
+    await updateDoc(doc(db,'cadd_students',studentDocId), { status: 'active' });
+    const r = allLeaveRequests.find(x => x.id === requestId);
+    if (r) { r.status = 'revoked'; r.revokedAt = Timestamp.now(); }
+    const s = allStudents.find(x => x.docId === studentDocId);
+    if (s) s.status = 'active';
+    showToast('Leave ended — student marked "Active"', 'success');
+    renderLeaveRequests();
+    filterStudents();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.adminRevokeStudentLeave = adminRevokeStudentLeave;
+
+// Undo for an accidental revoke (student or admin) — puts the leave request back to
+// 'approved' and the student back to 'on_leave'. Symmetric with the revoke action itself.
+async function restoreStudentLeave(requestId, studentDocId) {
+  if (!confirm('Restore this leave to "Approved" and mark the student "On Leave" again?')) return;
+  try {
+    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'approved', reviewedAt: Timestamp.now() });
+    await updateDoc(doc(db,'cadd_students',studentDocId), { status: 'on_leave' });
+    const r = allLeaveRequests.find(x => x.id === requestId);
+    if (r) { r.status = 'approved'; r.reviewedAt = Timestamp.now(); }
+    const s = allStudents.find(x => x.docId === studentDocId);
+    if (s) s.status = 'on_leave';
+    showToast('Leave restored — student marked "On Leave"', 'success');
+    renderLeaveRequests();
+    filterStudents();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.restoreStudentLeave = restoreStudentLeave;
 
 // ── FACULTY LEAVE ──
 // Separate from student leave requests. A faculty leave record, once APPROVED, means: for
