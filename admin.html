@@ -332,6 +332,7 @@
             <option value="absent">⚪ Absent</option>
             <option value="notScheduled">➖ Not Scheduled Today</option>
             <option value="facultyLeave">🧳 Faculty on Leave</option>
+            <option value="onLeave">🌴 Own Approved Leave</option>
           </select>
           <select id="slotDetailCourseFilter" onchange="renderSlotDetail()"><option value="">All Courses</option></select>
           <select id="slotDetailFacultyFilter" onchange="renderSlotDetail()"><option value="">All Faculty</option></select>
@@ -517,7 +518,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Requested</th><th>Student</th><th>Course</th><th>Reason</th><th>Faculty Review</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Leave Dates</th><th>Student</th><th>Course</th><th>Reason</th><th>Faculty Review</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="leaveRequestsTable"><tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
         </table>
       </div>
@@ -1632,14 +1633,18 @@ async function saveFaculty() {
 
 async function deleteFacultyConfirm() {
   if (!editingFacultyId) return;
-  if (!confirm('Delete this faculty account permanently? This cannot be undone.')) return;
+  if (!confirm('Delete this faculty account permanently? This will also delete their faculty leave records. This cannot be undone.')) return;
   try {
+    const leaveSnap = await getDocs(query(collection(db,'cadd_faculty_leave'), where('facultyDocId','==',editingFacultyId)));
+    await Promise.all(leaveSnap.docs.map(d => deleteDoc(doc(db,'cadd_faculty_leave', d.id))));
     await deleteDoc(doc(db,'cadd_faculty',editingFacultyId));
     allFaculty = allFaculty.filter(x => x.docId !== editingFacultyId);
+    allFacultyLeave = allFacultyLeave.filter(x => x.facultyDocId !== editingFacultyId);
     populateDropdowns();
-    showToast('Faculty deleted', 'warning');
+    showToast('Faculty and their leave records deleted', 'warning');
     closeModal('facultyModal');
     filterFacultyTable();
+    filterStudents(); // in case that faculty's leave was excluding some students' absence days
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 
@@ -1661,7 +1666,7 @@ function getStudentStreakInfo(s) {
   if (!baseTs) return '<span style="color:var(--text3);font-size:11px">—</span>';
 
   const baseDate = new Date(baseTs.seconds * 1000);
-  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, getFacultyLeaveRanges(s.faculty));
+  const missed = scheduledDaysMissed(baseDate, s.attendanceDays, [...getFacultyLeaveRanges(s.faculty), ...getStudentLeaveRanges(s.docId)]);
   const dateLabel = baseDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
   if (missed === 0) {
@@ -2199,8 +2204,10 @@ function renderLeaveRequests() {
 
   tb.innerHTML = '';
   list.forEach(r => {
-    const dateLabel = r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
-    let statusHtml, actionsHtml = '—';
+    const dateLabel = r.dateFrom
+      ? (r.dateFrom === r.dateTo ? r.dateFrom : `${r.dateFrom} → ${r.dateTo}`)
+      : (r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—');
+    let statusHtml, actionsHtml = '';
     if (r.status === 'pending') {
       statusHtml = `<span style="color:#F0C040;font-weight:600">⏳ Pending</span>`;
       actionsHtml = `
@@ -2215,6 +2222,7 @@ function renderLeaveRequests() {
     } else {
       statusHtml = `<span style="color:var(--red);font-weight:600">❌ Rejected</span>`;
     }
+    actionsHtml += `<button class="btn btn-ghost btn-sm" onclick="deleteLeaveRequest('${r.id}')" title="Permanently delete this record" style="color:var(--red)">🗑️</button>`;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="font-size:12px">${dateLabel}</td>
@@ -2295,6 +2303,21 @@ async function restoreStudentLeave(requestId, studentDocId) {
 }
 window.restoreStudentLeave = restoreStudentLeave;
 
+// Permanently removes a single leave request record — for cleaning up duplicates, test
+// entries, or mistakes. Unlike revoke/reject, this can't be undone (record is gone, not
+// just status-changed).
+async function deleteLeaveRequest(id) {
+  if (!confirm('Permanently delete this leave request record? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db,'cadd_leave_requests', id));
+    allLeaveRequests = allLeaveRequests.filter(x => x.id !== id);
+    showToast('Leave request deleted', 'warning');
+    renderLeaveRequests();
+    filterStudents(); // in case that was the record excluding some days from the streak calc
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.deleteLeaveRequest = deleteLeaveRequest;
+
 // ── FACULTY LEAVE ──
 // Separate from student leave requests. A faculty leave record, once APPROVED, means: for
 // those dates, that faculty's students should not be counted absent — it wasn't their fault
@@ -2323,6 +2346,15 @@ function getFacultyLeaveRanges(facultyDocId) {
 }
 function isDateInLeaveRanges(date, ranges) {
   return ranges.some(r => date >= r.from && date <= r.to);
+}
+// A student's own approved leave date-ranges (distinct from their faculty's leave) — also
+// excluded from absence calculations, since an approved leave is, by definition, an excused
+// absence and shouldn't count against Days Absent / Streak / Live Slots.
+function getStudentLeaveRanges(studentDocId) {
+  if (!studentDocId) return [];
+  return allLeaveRequests
+    .filter(r => r.studentDocId === studentDocId && r.status === 'approved' && r.dateFrom && r.dateTo)
+    .map(r => ({ from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') }));
 }
 
 function populateAdminFacultyLeaveDropdown() {
@@ -2394,7 +2426,7 @@ function renderFacultyLeave() {
 
   tb.innerHTML = '';
   list.forEach(r=>{
-    let statusHtml, actionsHtml = '—';
+    let statusHtml, actionsHtml = '';
     if (r.status === 'pending') {
       statusHtml = '<span style="color:#F0C040;font-weight:600">⏳ Pending</span>';
       actionsHtml = `
@@ -2407,6 +2439,7 @@ function renderFacultyLeave() {
       statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
       actionsHtml = `<button class="btn btn-green btn-sm" onclick="approveFacultyLeave('${r.id}')">✅ Approve Instead</button>`;
     }
+    actionsHtml += `<button class="btn btn-ghost btn-sm" onclick="deleteFacultyLeaveRecord('${r.id}')" title="Permanently delete this record" style="color:var(--red)">🗑️</button>`;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.facultyName||'—'}</td>
@@ -2445,6 +2478,18 @@ async function rejectFacultyLeave(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.rejectFacultyLeave = rejectFacultyLeave;
+
+async function deleteFacultyLeaveRecord(id) {
+  if (!confirm('Permanently delete this faculty leave record? This cannot be undone.')) return;
+  try {
+    await deleteDoc(doc(db,'cadd_faculty_leave', id));
+    allFacultyLeave = allFacultyLeave.filter(x => x.id !== id);
+    showToast('Faculty leave record deleted', 'warning');
+    renderFacultyLeave();
+    filterStudents(); // in case that was the record excluding some days from the streak calc
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.deleteFacultyLeaveRecord = deleteFacultyLeaveRecord;
 
 // "Callback"/undo for an approved faculty leave — e.g. the leave was entered by mistake, or
 // the faculty ended up coming in after all. Setting status back to 'rejected' removes it from
@@ -2834,7 +2879,9 @@ async function loadModalLeaveHistory(docId) {
     }
     tb.innerHTML = '';
     list.forEach(r=>{
-      const dateLabel = r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—';
+      const dateLabel = r.dateFrom
+        ? (r.dateFrom === r.dateTo ? r.dateFrom : `${r.dateFrom} → ${r.dateTo}`)
+        : (r.requestedAt ? new Date(r.requestedAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : '—');
       let statusHtml;
       if (r.status==='approved') statusHtml = '<span style="color:var(--green);font-weight:600">✅ Approved</span>';
       else if (r.status==='rejected') statusHtml = '<span style="color:var(--red);font-weight:600">❌ Rejected</span>';
@@ -3128,11 +3175,11 @@ async function loadModalAttendance(docId, s) {
   // Sun/Mon/Tue/Thu in between.
   const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
   const today0 = new Date(); today0.setHours(0,0,0,0);
-  const facultyLeaveRanges = getFacultyLeaveRanges(s.faculty);
+  const excludedRanges = [...getFacultyLeaveRanges(s.faculty), ...getStudentLeaveRanges(s.docId)];
   let totalScheduledDays = 0;
   { const cursor = new Date(admDate);
     while (cursor <= today0) {
-      if ((!schedDays.length || schedDays.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, facultyLeaveRanges)) totalScheduledDays++;
+      if ((!schedDays.length || schedDays.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, excludedRanges)) totalScheduledDays++;
       cursor.setDate(cursor.getDate()+1);
     }
   }
@@ -3263,14 +3310,33 @@ async function saveEditStudent() {
 }
 
 async function deleteStudentConfirm() {
-  if(!confirm('Delete this student permanently? This cannot be undone.')) return;
+  if(!confirm('Delete this student permanently? This will also delete ALL their attendance, feedback, and leave request records everywhere. This cannot be undone.')) return;
   try {
+    // Cascade delete — otherwise attendance/feedback/leave-request records for this student
+    // stay in the database forever with nothing to click through to (orphaned data still
+    // visible in those lists even though the student itself is gone).
+    const [attSnap, fbSnap, leaveSnap] = await Promise.all([
+      getDocs(query(collection(db,'cadd_attendance'), where('studentDocId','==',editingStudentId))),
+      getDocs(query(collection(db,'cadd_feedback'), where('studentDocId','==',editingStudentId))),
+      getDocs(query(collection(db,'cadd_leave_requests'), where('studentDocId','==',editingStudentId)))
+    ]);
+    await Promise.all([
+      ...attSnap.docs.map(d => deleteDoc(doc(db,'cadd_attendance', d.id))),
+      ...fbSnap.docs.map(d => deleteDoc(doc(db,'cadd_feedback', d.id))),
+      ...leaveSnap.docs.map(d => deleteDoc(doc(db,'cadd_leave_requests', d.id)))
+    ]);
     await deleteDoc(doc(db,'cadd_students',editingStudentId));
-    allStudents=allStudents.filter(x=>x.docId!==editingStudentId);
-    showToast('Student deleted','warning');
+
+    allStudents = allStudents.filter(x=>x.docId!==editingStudentId);
+    allAttendance = allAttendance.filter(x=>x.studentDocId!==editingStudentId);
+    allFeedback = allFeedback.filter(x=>x.studentDocId!==editingStudentId);
+    allLeaveRequests = allLeaveRequests.filter(x=>x.studentDocId!==editingStudentId);
+
+    showToast('Student and all related records deleted', 'warning');
     closeModal('studentModal');
     filterStudents();
     await loadOverview();
+    renderNotificationBell();
   } catch(e){showToast('Error: '+e.message,'error');}
 }
 
@@ -3606,7 +3672,7 @@ async function loadLiveSlots() {
     });
 
     liveSlotsData = {};
-    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[], facultyLeave:[] }; });
+    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[], facultyLeave:[], onLeave:[] }; });
 
     const today0ForSlots = new Date(); today0ForSlots.setHours(0,0,0,0);
     activeStudents.forEach(s=>{
@@ -3618,10 +3684,14 @@ async function loadLiveSlots() {
       const rec = recByStudent[s.docId];
       const entry = { student: s, record: rec || null };
       const facultyOnLeaveToday = isDateInLeaveRanges(today0ForSlots, getFacultyLeaveRanges(s.faculty));
+      const studentOnLeaveToday = isDateInLeaveRanges(today0ForSlots, getStudentLeaveRanges(s.docId));
       if (rec && !rec.checkOut) {
         liveSlotsData[slotName].present.push(entry);
       } else if (rec && rec.checkOut) {
         liveSlotsData[slotName].left.push(entry);
+      } else if (scheduledToday && studentOnLeaveToday) {
+        // Student's own approved leave covers today — an excused absence, not a real one.
+        liveSlotsData[slotName].onLeave.push(entry);
       } else if (scheduledToday && facultyOnLeaveToday) {
         // Faculty wasn't available today — not the student's fault, don't count as absent.
         liveSlotsData[slotName].facultyLeave.push(entry);
@@ -3639,13 +3709,13 @@ async function loadLiveSlots() {
 
     allSlotNames.forEach(sn=>{
       const d = liveSlotsData[sn];
-      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length + d.facultyLeave.length;
+      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length + d.facultyLeave.length + d.onLeave.length;
       const div=document.createElement('div');
       div.className='slot-card';
       div.id='slot-card-'+cssSafe(sn);
       div.onclick=()=>showSlotDetail(sn);
       div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">active now · ${totalInSlot} total in slot</div>
-        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span>${d.facultyLeave.length ? `<span>🧳 ${d.facultyLeave.length}</span>` : ''}</div>`;
+        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span>${d.facultyLeave.length ? `<span>🧳 ${d.facultyLeave.length}</span>` : ''}${d.onLeave.length ? `<span>🌴 ${d.onLeave.length}</span>` : ''}</div>`;
       grid.appendChild(div);
     });
   } catch(e) {
@@ -3687,7 +3757,7 @@ window.closeSlotDetail = closeSlotDetail;
 
 function populateSlotDetailFilterOptions(slotName) {
   const d = liveSlotsData[slotName]; if (!d) return;
-  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled, ...d.facultyLeave];
+  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled, ...d.facultyLeave, ...d.onLeave];
   const courses = new Set(all.map(e=>e.student.course).filter(Boolean));
   const faculties = new Set(all.map(e=>e.student.faculty).filter(Boolean));
   const courseSel = document.getElementById('slotDetailCourseFilter');
@@ -3719,6 +3789,7 @@ function renderSlotDetail() {
   d.absent.forEach(e=>rows.push({...e, statusKey:'absent'}));
   d.notScheduled.forEach(e=>rows.push({...e, statusKey:'notScheduled'}));
   d.facultyLeave.forEach(e=>rows.push({...e, statusKey:'facultyLeave'}));
+  d.onLeave.forEach(e=>rows.push({...e, statusKey:'onLeave'}));
 
   rows = rows.filter(row => {
     const s = row.student;
@@ -3734,7 +3805,7 @@ function renderSlotDetail() {
     return;
   }
 
-  const order = { present:0, left:1, absent:2, facultyLeave:3, notScheduled:4 };
+  const order = { present:0, left:1, absent:2, onLeave:3, facultyLeave:4, notScheduled:5 };
   rows.sort((a,b)=> order[a.statusKey]-order[b.statusKey] || (a.student.name||'').localeCompare(b.student.name||''));
 
   tb.innerHTML='';
@@ -3756,6 +3827,8 @@ function renderSlotDetail() {
       statusBadge = '<span class="badge sd-absent">⚪ Absent</span>';
     } else if (row.statusKey==='facultyLeave') {
       statusBadge = '<span class="badge" style="background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3)">🧳 Faculty on Leave</span>';
+    } else if (row.statusKey==='onLeave') {
+      statusBadge = '<span class="badge" style="background:rgba(76,175,130,0.15);color:var(--green);border:1px solid rgba(76,175,130,0.3)">🌴 Own Approved Leave</span>';
     } else {
       statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border)">➖ Not Scheduled Today</span>';
     }
