@@ -506,13 +506,33 @@
     <div class="page" id="page-leaveRequests">
       <div class="page-header">
         <h1>🌴 Leave Requests</h1>
+        <button class="btn btn-orange" onclick="toggleAdminStudentLeaveForm()">+ Add Student Leave</button>
       </div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+        Leave added here (or approved from a student's own request) is saved with dates, so the student can end it
+        themselves anytime via "I'm Back — End My Leave" in their app — same as any other approved leave.
+      </p>
+
+      <div class="card" id="adminStudentLeaveForm" style="display:none;margin-bottom:18px">
+        <div class="search-row">
+          <select id="aslStudent"><option value="">Select Student…</option></select>
+          <input type="date" id="aslFrom" title="From date"/>
+          <input type="date" id="aslTo" title="To date"/>
+        </div>
+        <textarea id="aslReason" rows="2" placeholder="Reason (optional)" style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:8px;color:#fff;padding:9px 12px;font-size:12px;font-family:'Inter',sans-serif;outline:none;margin-top:8px"></textarea>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-orange btn-sm" onclick="submitAdminStudentLeave()">Save (auto-approved)</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleAdminStudentLeaveForm()">Cancel</button>
+        </div>
+      </div>
+
       <div class="search-row">
         <input type="text" id="lrSearch" placeholder="Search by student name…" oninput="renderLeaveRequests()"/>
         <select id="lrStatusFilter" onchange="renderLeaveRequests()">
           <option value="pending">⏳ Pending</option>
           <option value="">All</option>
           <option value="approved">✅ Approved</option>
+          <option value="revoked">↩️ Ended Early</option>
           <option value="rejected">❌ Rejected</option>
         </select>
       </div>
@@ -2317,6 +2337,68 @@ async function deleteLeaveRequest(id) {
   } catch(e) { showToast('Error: ' + e.message, 'error'); }
 }
 window.deleteLeaveRequest = deleteLeaveRequest;
+
+// ── ADMIN: ADD STUDENT LEAVE DIRECTLY ──
+// Same pattern as "+ Add Faculty Leave" — creates a real cadd_leave_requests record
+// (status already 'approved', requestedBy:'admin') instead of just flipping the student's
+// status flag. This matters: because it has real dateFrom/dateTo, it (a) gets excluded from
+// Days Absent/Streak/Live Slots like any other approved leave, and (b) the student can end it
+// themselves via "I'm Back — End My Leave" in their own app, exactly like a leave they
+// requested themselves — there's no separate "admin-only" leave type under the hood.
+function populateAdminStudentLeaveDropdown() {
+  const sel = document.getElementById('aslStudent');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select Student…</option>' + allStudents
+    .filter(s => s.status !== 'deactivated')
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+    .map(s => `<option value="${s.docId}">${s.name} (${s.studentId||'—'})</option>`).join('');
+  sel.value = cur;
+}
+window.populateAdminStudentLeaveDropdown = populateAdminStudentLeaveDropdown;
+
+function toggleAdminStudentLeaveForm() {
+  const el = document.getElementById('adminStudentLeaveForm');
+  const opening = el.style.display === 'none';
+  el.style.display = opening ? 'block' : 'none';
+  if (opening) populateAdminStudentLeaveDropdown();
+}
+window.toggleAdminStudentLeaveForm = toggleAdminStudentLeaveForm;
+
+async function submitAdminStudentLeave() {
+  const studentDocId = document.getElementById('aslStudent').value;
+  const dateFrom = document.getElementById('aslFrom').value;
+  const dateTo = document.getElementById('aslTo').value;
+  const reason = document.getElementById('aslReason').value.trim();
+  if (!studentDocId) { showToast('Select a student', 'error'); return; }
+  if (!dateFrom || !dateTo) { showToast('Pick both dates', 'error'); return; }
+  if (dateTo < dateFrom) { showToast('"To" date is before "From" date', 'error'); return; }
+  const s = allStudents.find(x => x.docId === studentDocId);
+  try {
+    await addDoc(collection(db,'cadd_leave_requests'), {
+      studentDocId,
+      studentName: s ? s.name : '—',
+      studentIdDisplay: s ? s.studentId : '—',
+      course: s ? (s.course || '') : '',
+      reason,
+      dateFrom, dateTo,
+      status: 'approved', // admin-added leave is authoritative immediately, same as faculty leave
+      requestedBy: 'admin',
+      requestedAt: Timestamp.now(),
+      reviewedAt: Timestamp.now()
+    });
+    await updateDoc(doc(db,'cadd_students',studentDocId), { status: 'on_leave' });
+    if (s) s.status = 'on_leave';
+    showToast('Student leave added and approved', 'success');
+    document.getElementById('aslStudent').value='';
+    document.getElementById('aslFrom').value='';
+    document.getElementById('aslTo').value='';
+    document.getElementById('aslReason').value='';
+    toggleAdminStudentLeaveForm();
+    await loadLeaveRequests();
+    filterStudents();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.submitAdminStudentLeave = submitAdminStudentLeave;
 
 // ── FACULTY LEAVE ──
 // Separate from student leave requests. A faculty leave record, once APPROVED, means: for
