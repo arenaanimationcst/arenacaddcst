@@ -688,6 +688,14 @@
 </div>
 
 <!-- LEAVE REQUEST MODAL -->
+<div class="install-modal-overlay" id="announcementModalOverlay" style="z-index:2100">
+  <div class="install-modal" style="max-width:420px;border:1px solid rgba(255,77,77,0.4)">
+    <div style="font-size:11px;letter-spacing:1px;color:#ff4d4d;font-weight:800;text-transform:uppercase;margin-bottom:10px">⚠️ Notice</div>
+    <p id="announcementMessageText" style="white-space:pre-wrap;color:#fff;font-size:14px;line-height:1.6;text-align:left;margin-bottom:22px">—</p>
+    <button class="btn-primary" onclick="acknowledgeAnnouncement()">OK, I Understand</button>
+  </div>
+</div>
+
 <div class="install-modal-overlay" id="leaveRequestModalOverlay">
   <div class="leave-modal">
     <h3>Request Leave</h3>
@@ -1074,6 +1082,29 @@ function getLocation() {
   });
 }
 
+// ── STUDENT-FACING ANNOUNCEMENT ──
+// Shows every time the app opens (fresh login AND session-restore) as long as it's turned
+// ON — not a "seen it once, never again" thing. It only stops appearing once admin switches
+// it OFF. No per-student "already seen" tracking on purpose — the whole point is a repeated
+// reminder for as many days as it stays on, not a one-time notice.
+async function checkAnnouncement() {
+  try {
+    const snap = await getDoc(doc(db,'cadd_config','announcement'));
+    if (!snap.exists()) return;
+    const ann = snap.data();
+    if (!ann.enabled || !ann.message) return;
+    document.getElementById('announcementMessageText').textContent = ann.message;
+    document.getElementById('announcementModalOverlay').classList.add('show');
+  } catch(e) {
+    console.error('Announcement check error:', e); // fail silently — a broken notice shouldn't lock students out of the app
+  }
+}
+
+function acknowledgeAnnouncement() {
+  document.getElementById('announcementModalOverlay').classList.remove('show');
+}
+window.acknowledgeAnnouncement = acknowledgeAnnouncement;
+
 async function doLogin() {
   const id = document.getElementById('loginId').value.trim();
   const pw = document.getElementById('loginPw').value.trim();
@@ -1142,6 +1173,7 @@ async function tryRestoreSession() {
 async function loadDashboard() {
   const s = currentStudent;
   currentStudentDocId = currentStudent.docId;
+  checkAnnouncement(); // fire-and-forget — shouldn't block the rest of the dashboard from loading
   // Always reset location error state and done-for-day on fresh dashboard load
   document.getElementById('locationDenied').style.display='none';
   document.getElementById('actionCard').style.display='block';
