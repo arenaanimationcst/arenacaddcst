@@ -283,6 +283,7 @@
     <div class="nav-item" data-page="attendance" onclick="showPage('attendance')"><span class="icon">📋</span> Attendance Log</div>
     <div class="nav-section">Settings</div>
     <div class="nav-item" data-page="config" onclick="showPage('config')"><span class="icon">⚙️</span> Slots & Faculty</div>
+    <div class="nav-item" data-page="announcement" onclick="showPage('announcement')"><span class="icon">📢</span> Announcement</div>
   </div>
 
   <div class="content">
@@ -725,6 +726,38 @@
             <button class="btn btn-orange" onclick="addFaculty()">Add</button>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5">This is the old simple name list. For faculty who need to log in and approve student sessions, use <strong>Faculty Accounts</strong> in the sidebar instead.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ANNOUNCEMENT -->
+    <div class="page" id="page-announcement">
+      <div class="page-header"><h1>📢 Announcement</h1></div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:16px;max-width:600px">
+        When ON, every student sees this as a full-screen notice <strong>every time they open the app</strong> — login or just
+        reopening it — and must tap "OK, I Understand" to continue. It keeps showing on every open for as long as it stays ON.
+        Turn it OFF and it stops immediately.
+      </p>
+
+      <div class="card" style="max-width:600px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
+          <div class="card-title" style="margin:0;flex:1">Status</div>
+          <button id="annToggleBtn" class="btn btn-sm" onclick="toggleAnnouncementStatus()" style="min-width:110px">—</button>
+        </div>
+
+        <div class="card-title">Message</div>
+        <textarea id="annMessage" rows="5" placeholder="e.g. Institute will remain closed on 15th August (Independence Day). Regular classes resume the next working day as per your slot." style="width:100%;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;color:#fff;padding:10px 12px;font-size:13px;font-family:'Inter',sans-serif;outline:none;resize:vertical"></textarea>
+        <div style="font-size:11px;color:var(--text3);margin-top:10px" id="annLastUpdated"></div>
+
+        <button class="btn btn-orange" style="margin-top:14px" onclick="saveAnnouncement()">Save</button>
+      </div>
+
+      <div style="max-width:600px;margin-top:22px">
+        <div class="card-title" style="margin-bottom:10px">Preview — this is what students will see</div>
+        <div style="background:#1a1a1a;border:1px solid var(--border);border-radius:14px;padding:22px;text-align:center">
+          <div style="font-size:11px;letter-spacing:1px;color:#ff4d4d;font-weight:800;text-transform:uppercase;margin-bottom:8px">⚠️ Notice</div>
+          <div id="annPreviewText" style="color:#fff;font-size:14px;line-height:1.6;white-space:pre-wrap;margin-bottom:16px">(nothing written yet)</div>
+          <div style="display:inline-block;background:var(--orange);color:#fff;font-size:13px;font-weight:600;padding:9px 22px;border-radius:8px">OK, I Understand</div>
         </div>
       </div>
     </div>
@@ -2613,6 +2646,90 @@ async function deleteFacultyLeaveRecord(id) {
 }
 window.deleteFacultyLeaveRecord = deleteFacultyLeaveRecord;
 
+// ── STUDENT-FACING ANNOUNCEMENT ──
+// Single doc at cadd_config/announcement — { enabled, message, updatedAt }. index.html
+// compares each student's own lastSeenAnnouncementAt against this doc's updatedAt: if the
+// student hasn't seen this exact version yet (or updatedAt changed since they last saw it),
+// they get the full-screen notice again, even if they already dismissed an older message.
+let announcementState = { enabled: false, message: '' };
+
+async function loadAnnouncementSettings() {
+  try {
+    const snap = await getDoc(doc(db,'cadd_config','announcement'));
+    announcementState = snap.exists() ? snap.data() : { enabled: false, message: '' };
+  } catch(e) {
+    console.error('Announcement load error:', e);
+    announcementState = { enabled: false, message: '' };
+  }
+  document.getElementById('annMessage').value = announcementState.message || '';
+  const lastUpdatedEl = document.getElementById('annLastUpdated');
+  lastUpdatedEl.textContent = announcementState.updatedAt
+    ? 'Last updated ' + new Date(announcementState.updatedAt.seconds*1000).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    : 'Never set';
+  renderAnnouncementToggleBtn();
+  updateAnnouncementPreview();
+}
+window.loadAnnouncementSettings = loadAnnouncementSettings;
+
+function renderAnnouncementToggleBtn() {
+  const btn = document.getElementById('annToggleBtn');
+  if (announcementState.enabled) {
+    btn.textContent = '🟢 ON';
+    btn.className = 'btn btn-sm';
+    btn.style.background = 'rgba(76,175,130,0.15)';
+    btn.style.color = 'var(--green)';
+    btn.style.border = '1px solid rgba(76,175,130,0.3)';
+  } else {
+    btn.textContent = '⚪ OFF';
+    btn.className = 'btn btn-sm';
+    btn.style.background = 'rgba(255,255,255,0.06)';
+    btn.style.color = 'var(--text3)';
+    btn.style.border = '1px solid var(--border)';
+  }
+}
+
+function updateAnnouncementPreview() {
+  const msg = document.getElementById('annMessage').value.trim();
+  document.getElementById('annPreviewText').textContent = msg || '(nothing written yet)';
+}
+document.getElementById('annMessage').addEventListener('input', updateAnnouncementPreview);
+
+async function toggleAnnouncementStatus() {
+  announcementState.enabled = !announcementState.enabled;
+  renderAnnouncementToggleBtn();
+  // Toggling is saved immediately (unlike the message, which needs an explicit Save) —
+  // an admin flipping this off should take effect right away without a second click.
+  try {
+    await setDoc(doc(db,'cadd_config','announcement'), {
+      enabled: announcementState.enabled,
+      message: document.getElementById('annMessage').value.trim(),
+      updatedAt: Timestamp.now()
+    }, { merge: true });
+    showToast(announcementState.enabled ? 'Announcement turned ON' : 'Announcement turned OFF', 'success');
+  } catch(e) {
+    announcementState.enabled = !announcementState.enabled; // revert on failure
+    renderAnnouncementToggleBtn();
+    showToast('Error: ' + e.message, 'error');
+  }
+}
+window.toggleAnnouncementStatus = toggleAnnouncementStatus;
+
+async function saveAnnouncement() {
+  const message = document.getElementById('annMessage').value.trim();
+  if (announcementState.enabled && !message) { showToast('Write a message before turning this on', 'error'); return; }
+  try {
+    await setDoc(doc(db,'cadd_config','announcement'), {
+      enabled: announcementState.enabled,
+      message,
+      updatedAt: Timestamp.now() // bumping this is what makes it reappear for students who already acknowledged the old message
+    }, { merge: true });
+    announcementState.message = message;
+    document.getElementById('annLastUpdated').textContent = 'Last updated ' + new Date().toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    showToast('Announcement saved — students will see it now', 'success');
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.saveAnnouncement = saveAnnouncement;
+
 // "Callback"/undo for an approved faculty leave — e.g. the leave was entered by mistake, or
 // the faculty ended up coming in after all. Setting status back to 'rejected' removes it from
 // getFacultyLeaveRanges() immediately, so those students go back to being counted normally
@@ -3981,6 +4098,7 @@ function showPage(id) {
   if(id==='feedback') loadFeedback();
   if(id==='leaveRequests') loadLeaveRequests();
   if(id==='facultyLeave') { populateAdminFacultyLeaveDropdown(); loadFacultyLeavePage(); }
+  if(id==='announcement') loadAnnouncementSettings();
 }
 
 function switchTab(tab) {
