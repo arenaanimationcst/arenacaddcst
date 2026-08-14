@@ -1093,6 +1093,7 @@ async function checkAnnouncement() {
     if (!snap.exists()) return;
     const ann = snap.data();
     if (!ann.enabled || !ann.message) return;
+    if (ann.expiresAt && ann.expiresAt.seconds * 1000 <= Date.now()) return; // auto-expired — treat same as OFF
     document.getElementById('announcementMessageText').textContent = ann.message;
     document.getElementById('announcementModalOverlay').classList.add('show');
   } catch(e) {
