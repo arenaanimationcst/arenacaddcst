@@ -1763,8 +1763,21 @@ async function loadStats() {
     const lsnap = await getDocs(lq);
     myLeaveRanges = lsnap.docs
       .map(d => d.data())
-      .filter(r => r.status === 'approved' && r.dateFrom && r.dateTo)
-      .map(r => ({ from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') }));
+      .filter(r => r.status === 'approved')
+      .map(r => {
+        if (r.dateFrom && r.dateTo) {
+          return { from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') };
+        }
+        // Legacy leave request without dates — fall back to a single day (the day requested)
+        // instead of silently contributing zero excluded days.
+        if (r.requestedAt) {
+          const d = new Date(r.requestedAt.seconds*1000); d.setHours(0,0,0,0);
+          const end = new Date(d); end.setHours(23,59,59,999);
+          return { from: d, to: end };
+        }
+        return null;
+      })
+      .filter(Boolean);
   } catch(e) { console.error('Own leave ranges fetch error:', e); }
   const isOnLeave = (d) => myLeaveRanges.some(r => d >= r.from && d <= r.to);
 
