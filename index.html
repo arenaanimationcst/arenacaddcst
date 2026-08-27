@@ -249,6 +249,7 @@
     .streak-day.today-absent { background:rgba(255,255,255,0.04); color:var(--text-muted); border:2px solid var(--cadd-orange); }
     .streak-day.not-scheduled { background:transparent; color:var(--text-muted); border:1px dashed rgba(255,255,255,0.08); opacity:0.4; }
     .streak-day.on-leave { background:rgba(122,132,255,0.15); color:#7A84FF; border:1px solid rgba(122,132,255,0.3); }
+    .streak-day.holiday { background:rgba(240,192,64,0.15); color:#F0C040; border:1px solid rgba(240,192,64,0.3); }
 
     /* History */
     .history-card { background:var(--cadd-card); border:1px solid var(--cadd-border); border-radius:var(--radius); overflow:hidden; }
@@ -1767,6 +1768,16 @@ async function loadStats() {
   } catch(e) { console.error('Own leave ranges fetch error:', e); }
   const isOnLeave = (d) => myLeaveRanges.some(r => d >= r.from && d <= r.to);
 
+  // Institute-wide holidays — same idea as own-leave, but applies to every student
+  // regardless of their individual schedule.
+  let holidaySet = new Set();
+  try {
+    const hsnap = await getDocs(collection(db,'cadd_holidays'));
+    holidaySet = new Set(hsnap.docs.map(d => d.id));
+  } catch(e) { console.error('Holidays fetch error:', e); }
+  const localDateStr = (d) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const isHoliday = (d) => holidaySet.has(localDateStr(d));
+
   // Uses trackingStartDate (when THIS app started tracking them) rather than admissionDate
   // (their real-world join date, which could predate this app and inflate "days absent" —
   // same fix as the admin panel's student-detail modal).
@@ -1784,7 +1795,7 @@ async function loadStats() {
   let totalScheduledDays = 0;
   { const cursor = new Date(baseDate);
     while (cursor <= today0) {
-      if ((!scheduledDays.length || scheduledDays.includes(cursor.getDay())) && !isOnLeave(cursor)) totalScheduledDays++;
+      if ((!scheduledDays.length || scheduledDays.includes(cursor.getDay())) && !isOnLeave(cursor) && !isHoliday(cursor)) totalScheduledDays++;
       cursor.setDate(cursor.getDate()+1);
     }
   }
@@ -1802,7 +1813,9 @@ async function loadStats() {
     const isScheduled = !scheduledDays.length || scheduledDays.includes(d.getDay());
     const isPresent=presentDays.has(d.toDateString()), isToday=i===0;
     const div=document.createElement('div');
-    if (isScheduled && !isPresent && isOnLeave(d)) {
+    if (isScheduled && !isPresent && isHoliday(d)) {
+      div.className='streak-day holiday';
+    } else if (isScheduled && !isPresent && isOnLeave(d)) {
       div.className='streak-day on-leave';
     } else if (!isScheduled) {
       div.className='streak-day not-scheduled';
