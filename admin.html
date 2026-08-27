@@ -715,7 +715,10 @@
           This always pulls their complete record, however far back it goes.
         </p>
         <div class="search-row">
-          <select id="attLogStudentPicker"><option value="">Select Student…</option></select>
+          <input type="text" id="attLogStudentSearch" placeholder="🔍 Type to search student by name or ID…" style="flex:1" oninput="filterAttLogStudentPicker()"/>
+        </div>
+        <div class="search-row">
+          <select id="attLogStudentPicker" style="flex:1"><option value="">Select Student…</option></select>
           <button class="btn btn-orange btn-sm" onclick="pullAttendanceLogStudent()">📅 Pull Full Day-by-Day Log</button>
         </div>
       </div>
@@ -852,6 +855,7 @@
           <option value="holiday">🎉 Holiday</option>
           <option value="notScheduled">➖ Not Scheduled</option>
         </select>
+        <button class="btn btn-ghost btn-sm" onclick="exportDayLogExcel()">📊 Export Excel</button>
       </div>
       <div class="table-wrap" style="max-height:420px;overflow-y:auto">
         <table>
@@ -2591,8 +2595,23 @@ function isDateInLeaveRanges(date, ranges) {
 function getStudentLeaveRanges(studentDocId) {
   if (!studentDocId) return [];
   return allLeaveRequests
-    .filter(r => r.studentDocId === studentDocId && r.status === 'approved' && r.dateFrom && r.dateTo)
-    .map(r => ({ from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') }));
+    .filter(r => r.studentDocId === studentDocId && r.status === 'approved')
+    .map(r => {
+      if (r.dateFrom && r.dateTo) {
+        return { from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') };
+      }
+      // Legacy leave request — approved before the date-range field existed on this form.
+      // Without a fix, these silently contributed ZERO excluded days (the old filter required
+      // dateFrom && dateTo), so a genuinely-approved leave would still show every day as
+      // "Absent". Best-effort fallback: treat it as a single day, the day it was requested.
+      if (r.requestedAt) {
+        const d = new Date(r.requestedAt.seconds*1000); d.setHours(0,0,0,0);
+        const end = new Date(d); end.setHours(23,59,59,999);
+        return { from: d, to: end };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 function populateAdminFacultyLeaveDropdown() {
@@ -3959,13 +3978,22 @@ function populateAttLogStudentPicker() {
   const sel = document.getElementById('attLogStudentPicker');
   if (!sel) return;
   const cur = sel.value;
-  sel.innerHTML = '<option value="">Select Student…</option>' + allStudents
+  const searchEl = document.getElementById('attLogStudentSearch');
+  const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const list = allStudents
     .filter(s => s.status !== 'deactivated')
-    .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+    .filter(s => !term || (s.name||'').toLowerCase().includes(term) || (s.studentId||'').toLowerCase().includes(term))
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  sel.innerHTML = '<option value="">Select Student…</option>' + list
     .map(s => `<option value="${s.docId}">${s.name} (${s.studentId||'—'})</option>`).join('');
-  sel.value = cur;
+  if (list.some(s => s.docId === cur)) sel.value = cur;
 }
 window.populateAttLogStudentPicker = populateAttLogStudentPicker;
+
+function filterAttLogStudentPicker() {
+  populateAttLogStudentPicker(); // rebuilds the dropdown's option list to match the search text
+}
+window.filterAttLogStudentPicker = filterAttLogStudentPicker;
 
 function pullAttendanceLogStudent() {
   const studentDocId = document.getElementById('attLogStudentPicker').value;
@@ -3973,6 +4001,30 @@ function pullAttendanceLogStudent() {
   openStudentDayLog(studentDocId); // same dedicated-query modal used from the student profile
 }
 window.pullAttendanceLogStudent = pullAttendanceLogStudent;
+
+function exportDayLogExcel() {
+  if (!currentDayLog.length) { showToast('No data to export', 'warning'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Export library not loaded — check your internet connection', 'error'); return; }
+  const filter = document.getElementById('dayLogStatusFilter').value;
+  const filtered = filter ? currentDayLog.filter(d => (d.status === 'present-active' ? 'present' : d.status) === filter) : currentDayLog;
+  const statusLabels = { present:'Present', 'present-active':'Present (Live)', absent:'Absent', onLeave:'Own Leave', facultyLeave:'Faculty Leave', holiday:'Holiday', notScheduled:'Not Scheduled' };
+  const rows = filtered.map(d => ({
+    'Date': d.date.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}),
+    'Day': d.date.toLocaleDateString('en-IN',{weekday:'short'}),
+    'Status': statusLabels[d.status] || d.status,
+    'Check In': d.record ? new Date(d.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '',
+    'Check Out': d.record && d.record.checkOut ? new Date(d.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : ''
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:8},{wch:16},{wch:10},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Day Log');
+  const studentNameSafe = (document.getElementById('dayLogTitle').textContent || 'Student').replace('📅 ','').replace(' — Full Day-by-Day Log','').replace(/[^a-zA-Z0-9]+/g,'_');
+  const dateStr = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `${studentNameSafe}_DayLog_${dateStr}.xlsx`);
+  showToast(`Exported ${rows.length} days to Excel`, 'success');
+}
+window.exportDayLogExcel = exportDayLogExcel;
 
 // One-click force logout straight from the Attendance Log table, no need to open the student modal
 async function forceLogoutAttendanceRow(id) {
