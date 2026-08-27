@@ -3877,6 +3877,37 @@ async function saveEditStudent() {
   const admDateVal = document.getElementById('ed-admDate').value;
   const validityDateVal = document.getElementById('ed-validityDate').value;
   const trackingStartVal = document.getElementById('ed-trackingStartDate').value;
+  const newStatus = document.getElementById('ed-status').value;
+  const prevStudent = allStudents.find(x => x.docId === editingStudentId);
+  const prevStatus = prevStudent ? (prevStudent.status || 'active') : 'active';
+
+  // Setting status to "On Leave" here (a plain flag flip) is NOT the same as the proper
+  // Leave Requests → "+ Add Student Leave" flow — this path creates no cadd_leave_requests
+  // record at all, so the student never sees "I'm Back — End My Leave", and none of those
+  // days get excluded from Days Absent / Streak / Live Slots (the exact bug we just fixed
+  // for Durre Shehwar, but structural this time instead of a missing-dates edge case).
+  // Redirect to the dated flow instead, so both admin paths always produce an identical,
+  // revocable, correctly-excluded result.
+  if (newStatus === 'on_leave' && prevStatus !== 'on_leave') {
+    const goToDatedFlow = confirm(
+      'To put a student on leave, use the dated Leave form instead — that way they can revoke it themselves via "I\'m Back" once they return, and those days won\'t count as absent.\n\nOpen that form now for this student? (Cancel to save without a dated leave record — not recommended.)'
+    );
+    if (goToDatedFlow) {
+      closeModal('studentModal');
+      showPage('leaveRequests');
+      document.getElementById('adminStudentLeaveForm').style.display = 'block';
+      populateAdminStudentLeaveDropdown();
+      document.getElementById('aslStudent').value = editingStudentId;
+      const todayStr = new Date().toISOString().slice(0,10);
+      document.getElementById('aslFrom').value = todayStr;
+      document.getElementById('aslTo').value = todayStr;
+      document.getElementById('aslStudent').scrollIntoView({behavior:'smooth', block:'center'});
+      return; // don't save the plain flag — submitAdminStudentLeave() will set status itself
+    }
+    // Cancelled — fall through and save the flag anyway, but warn it's incomplete.
+    showToast('Saved without a dated leave record — this student won\'t be excluded from absence stats or get a revoke option', 'warning');
+  }
+
   const data={
     name:document.getElementById('ed-name').value.trim(),
     phone:document.getElementById('ed-phone').value.trim(),
@@ -3884,7 +3915,7 @@ async function saveEditStudent() {
     course:document.getElementById('ed-course').value,
     faculty:document.getElementById('ed-faculty').value,
     slot:document.getElementById('ed-slot').value,
-    status:document.getElementById('ed-status').value,
+    status:newStatus,
     attendanceDays:Array.from(ed_selectedDays).sort()
   };
   if (admDateVal) data.admissionDate = Timestamp.fromDate(new Date(admDateVal));
