@@ -393,6 +393,25 @@ function getStudentLeaveRanges(studentDocId) {
     .map(r => ({ from: new Date(r.dateFrom + 'T00:00:00'), to: new Date(r.dateTo + 'T23:59:59') }));
 }
 
+// Institute-wide holidays — applies to every student regardless of individual schedule.
+// Mirrors admin.html's identical logic (cadd_holidays, docId = 'YYYY-MM-DD').
+let holidayDateSet = new Set();
+async function loadHolidaysForStreaks() {
+  try {
+    const snap = await getDocs(collection(db, 'cadd_holidays'));
+    holidayDateSet = new Set(snap.docs.map(d => d.id));
+  } catch (e) {
+    console.error('Holidays fetch error:', e);
+    holidayDateSet = new Set();
+  }
+}
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function isHolidayDate(d) {
+  return holidayDateSet.has(localDateStr(d));
+}
+
 // Counts how many of a student's OWN scheduled attendance days (e.g. Mon/Tue/Wed/Thu)
 // have passed since `fromDate`, ignoring days that aren't on their schedule (so Fri/Sat/Sun
 // don't count against a Mon-Thu student). Mirrors the identical helper in admin.html so
@@ -407,7 +426,7 @@ function scheduledDaysMissed(fromDate, attendanceDays, leaveRanges) {
   cursor.setDate(cursor.getDate() + 1); // start counting the day AFTER their last attendance
   let missed = 0;
   while (cursor <= today) {
-    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges)) missed++;
+    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges) && !isHolidayDate(cursor)) missed++;
     cursor.setDate(cursor.getDate() + 1);
   }
   return missed;
@@ -537,6 +556,7 @@ async function loadDashboard() {
   await fetchFacAttendance(); // needed before renderMyStudents() so the Streak column has data
   await loadFacultyLeaveForStreaks(); // ditto, so the Streak column excludes approved faculty-leave days
   await loadStudentLeaveForStreaks(); // ditto, so it also excludes each student's own approved leave days
+  await loadHolidaysForStreaks(); // ditto, so it also excludes institute-wide holidays
 
   renderStats();
   renderPendingApprovals();
