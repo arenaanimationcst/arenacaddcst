@@ -389,8 +389,21 @@ async function loadStudentLeaveForStreaks() {
 function getStudentLeaveRanges(studentDocId) {
   if (!studentDocId) return [];
   return allStudentLeaveForStreaks
-    .filter(r => r.studentDocId === studentDocId && r.status === 'approved' && r.dateFrom && r.dateTo)
-    .map(r => ({ from: new Date(r.dateFrom + 'T00:00:00'), to: new Date(r.dateTo + 'T23:59:59') }));
+    .filter(r => r.studentDocId === studentDocId && r.status === 'approved')
+    .map(r => {
+      if (r.dateFrom && r.dateTo) {
+        return { from: new Date(r.dateFrom + 'T00:00:00'), to: new Date(r.dateTo + 'T23:59:59') };
+      }
+      // Legacy leave request without dates — fall back to a single day (the day requested)
+      // instead of silently contributing zero excluded days. Mirrors admin.html's identical fix.
+      if (r.requestedAt) {
+        const d = new Date(r.requestedAt.seconds*1000); d.setHours(0,0,0,0);
+        const end = new Date(d); end.setHours(23,59,59,999);
+        return { from: d, to: end };
+      }
+      return null;
+    })
+    .filter(Boolean);
 }
 
 // Institute-wide holidays — applies to every student regardless of individual schedule.
