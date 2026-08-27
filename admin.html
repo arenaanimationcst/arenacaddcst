@@ -276,6 +276,7 @@
     <div class="nav-item" data-page="feedback" onclick="showPage('feedback')"><span class="icon">💬</span> Feedback</div>
     <div class="nav-item" data-page="leaveRequests" onclick="showPage('leaveRequests')"><span class="icon">🌴</span> Leave Requests</div>
     <div class="nav-item" data-page="facultyLeave" onclick="showPage('facultyLeave')"><span class="icon">🧳</span> Faculty Leave</div>
+    <div class="nav-item" data-page="holidays" onclick="showPage('holidays')"><span class="icon">🎉</span> Holidays</div>
     <div class="nav-item" data-page="addStudent" onclick="showPage('addStudent')"><span class="icon">➕</span> Add Student</div>
     <div class="nav-section">Faculty</div>
     <div class="nav-item" data-page="facultyAccounts" onclick="showPage('facultyAccounts')"><span class="icon">🧑‍🏫</span> Faculty Accounts</div>
@@ -335,6 +336,7 @@
             <option value="notScheduled">➖ Not Scheduled Today</option>
             <option value="facultyLeave">🧳 Faculty on Leave</option>
             <option value="onLeave">🌴 Own Approved Leave</option>
+            <option value="holiday">🎉 Institute Holiday</option>
           </select>
           <select id="slotDetailCourseFilter" onchange="renderSlotDetail()"><option value="">All Courses</option></select>
           <select id="slotDetailFacultyFilter" onchange="renderSlotDetail()"><option value="">All Faculty</option></select>
@@ -588,6 +590,32 @@
       </div>
     </div>
 
+    <!-- HOLIDAYS -->
+    <div class="page" id="page-holidays">
+      <div class="page-header"><h1>🎉 Holidays</h1></div>
+      <p style="color:var(--text3);font-size:12px;margin-bottom:16px;max-width:600px">
+        A date marked here applies to <strong>every student, every faculty</strong> — nobody is marked absent on this date,
+        regardless of their individual schedule. Use this for institute-wide closures (national holidays, festivals, etc.),
+        not for one person's leave — for that, use Leave Requests or Faculty Leave instead.
+      </p>
+
+      <div class="card" style="max-width:600px;margin-bottom:22px">
+        <div class="card-title">Add a Holiday</div>
+        <div class="search-row">
+          <input type="date" id="holDate" title="Date"/>
+          <input type="text" id="holLabel" placeholder="e.g. Independence Day" style="flex:1"/>
+          <button class="btn btn-orange" onclick="addHoliday()">Add</button>
+        </div>
+      </div>
+
+      <div class="table-wrap" style="max-width:600px">
+        <table>
+          <thead><tr><th>Date</th><th>Label</th><th>Actions</th></tr></thead>
+          <tbody id="holidaysTable"><tr><td colspan="3" style="color:var(--text3);text-align:center;padding:20px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ADD STUDENT -->
     <div class="page" id="page-addStudent">
       <div class="page-header"><h1>Add New Student</h1></div>
@@ -678,6 +706,20 @@
           <button class="btn btn-ghost" onclick="exportAttendancePDF()">📄 Export PDF</button>
         </div>
       </div>
+
+      <div class="card" style="max-width:600px;margin-bottom:18px">
+        <div class="card-title">📅 Pull One Student's Complete History</div>
+        <p style="color:var(--text3);font-size:11.5px;margin-bottom:10px">
+          The table below only shows recent records across everyone. For one student's full history —
+          every day they were present, absent, on leave, or it was a holiday — pick them here.
+          This always pulls their complete record, however far back it goes.
+        </p>
+        <div class="search-row">
+          <select id="attLogStudentPicker"><option value="">Select Student…</option></select>
+          <button class="btn btn-orange btn-sm" onclick="pullAttendanceLogStudent()">📅 Pull Full Day-by-Day Log</button>
+        </div>
+      </div>
+
       <div class="search-row">
         <input type="text" id="attSearch" placeholder="Search by student name or ID…" oninput="filterAttendance()"/>
         <input type="date" id="attDateFrom" onchange="filterAttendance()"/>
@@ -788,6 +830,36 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- DAY-BY-DAY LOG MODAL -->
+<div class="modal-overlay" id="dayLogModal" style="display:none">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <h3 id="dayLogTitle">📅 Day-by-Day Log</h3>
+      <button class="modal-close" onclick="closeModal('dayLogModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="att-summary" id="dayLogSummary" style="margin-bottom:14px"></div>
+      <div class="search-row">
+        <select id="dayLogStatusFilter" onchange="renderDayLog()">
+          <option value="">All Days</option>
+          <option value="present">🟢 Present</option>
+          <option value="absent">⚪ Absent</option>
+          <option value="onLeave">🌴 Own Leave</option>
+          <option value="facultyLeave">🧳 Faculty Leave</option>
+          <option value="holiday">🎉 Holiday</option>
+          <option value="notScheduled">➖ Not Scheduled</option>
+        </select>
+      </div>
+      <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Date</th><th>Day</th><th>Status</th><th>Check In</th><th>Check Out</th></tr></thead>
+          <tbody id="dayLogTable"><tr><td colspan="5" style="color:var(--text3);text-align:center;padding:20px">Loading full history…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -940,6 +1012,7 @@
             <div class="att-stat"><div class="av red" id="ms-absent">—</div><div class="al">Days Absent</div></div>
             <div class="att-stat"><div class="av orange" id="ms-hours">—</div><div class="al">Total Hours</div></div>
           </div>
+          <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="openStudentDayLog(editingStudentId)">📅 View Full Day-by-Day Log (Present / Absent / Leave / Holiday)</button>
           <div id="activeSessionBanner" style="display:none; background:rgba(76,175,130,0.08); border:1px solid rgba(76,175,130,0.25); border-radius:10px; padding:12px 16px; margin-bottom:14px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
             <span style="font-size:13px; color:var(--green)">🟢 Session currently active</span>
             <div style="display:flex;gap:8px">
@@ -1362,6 +1435,7 @@ async function init() {
   await loadStudents();
   await loadAttendance();
   await loadFacultyLeave();
+  await loadHolidays();
   await loadLeaveRequests(); // needed here (not just on-page-visit) so the bell has accurate counts from the start
   filterStudents(); // re-render so the Streak column reflects attendance
                      // (it rendered once already inside loadStudents(), before
@@ -2655,6 +2729,216 @@ async function deleteFacultyLeaveRecord(id) {
 }
 window.deleteFacultyLeaveRecord = deleteFacultyLeaveRecord;
 
+// ── INSTITUTE HOLIDAYS ──
+// Unlike faculty-leave or student-leave (which are scoped to one person), a holiday applies
+// to EVERYONE — no per-student or per-faculty filtering needed. Stored as one doc per date
+// in cadd_holidays, docId = the date string itself ('YYYY-MM-DD') so adding the same date
+// twice just overwrites rather than creating duplicates.
+let allHolidays = []; // [{date:'YYYY-MM-DD', label, createdAt}]
+let holidayDateSet = new Set();
+
+// Local-timezone date string (YYYY-MM-DD) — deliberately NOT toISOString(), which is UTC and
+// can roll over to the wrong calendar day depending on the browser's timezone.
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function isHolidayDate(d) {
+  return holidayDateSet.has(localDateStr(d));
+}
+
+async function loadHolidays() {
+  try {
+    const snap = await getDocs(collection(db,'cadd_holidays'));
+    allHolidays = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => a.date.localeCompare(b.date));
+    holidayDateSet = new Set(allHolidays.map(h => h.date));
+  } catch(e) {
+    console.error('Holidays load error:', e);
+    allHolidays = []; holidayDateSet = new Set();
+  }
+}
+window.loadHolidays = loadHolidays;
+
+async function loadHolidaysPage() {
+  await loadHolidays();
+  renderHolidays();
+}
+window.loadHolidaysPage = loadHolidaysPage;
+
+function renderHolidays() {
+  const tb = document.getElementById('holidaysTable');
+  if (!allHolidays.length) {
+    tb.innerHTML = '<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:20px">No holidays added yet.</td></tr>';
+    return;
+  }
+  const today = localDateStr(new Date());
+  tb.innerHTML = '';
+  allHolidays.forEach(h => {
+    const dateObj = new Date(h.date+'T00:00:00');
+    const isPast = h.date < today;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="${isPast ? 'color:var(--text3)' : ''}">${dateObj.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',weekday:'short'})}</td>
+      <td style="${isPast ? 'color:var(--text3)' : ''}">${(h.label||'—').replace(/</g,'&lt;')}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="deleteHoliday('${h.id}')" style="color:var(--red)">🗑️ Delete</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderHolidays = renderHolidays;
+
+async function addHoliday() {
+  const date = document.getElementById('holDate').value;
+  const label = document.getElementById('holLabel').value.trim();
+  if (!date) { showToast('Pick a date', 'error'); return; }
+  if (!label) { showToast('Add a label (e.g. "Independence Day")', 'error'); return; }
+  try {
+    await setDoc(doc(db,'cadd_holidays',date), { date, label, createdAt: Timestamp.now() });
+    document.getElementById('holDate').value = '';
+    document.getElementById('holLabel').value = '';
+    showToast('Holiday added', 'success');
+    await loadHolidays();
+    renderHolidays();
+    filterStudents(); // refresh Streak column now that this date is excluded everywhere
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.addHoliday = addHoliday;
+
+async function deleteHoliday(dateId) {
+  if (!confirm('Remove this holiday? Attendance calculations will treat this date normally again.')) return;
+  try {
+    await deleteDoc(doc(db,'cadd_holidays',dateId));
+    allHolidays = allHolidays.filter(h => h.id !== dateId);
+    holidayDateSet.delete(dateId);
+    showToast('Holiday removed', 'warning');
+    renderHolidays();
+    filterStudents();
+  } catch(e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.deleteHoliday = deleteHoliday;
+
+// ── DAY-BY-DAY ATTENDANCE/LEAVE LOG (per student) ──
+// Deliberately uses a DEDICATED query scoped to just this one student — NOT the global
+// allAttendance array (which is capped, see loadAttendance()). That cap is exactly what was
+// causing students' older records to silently disappear from views that relied on it. This
+// function always gets that student's COMPLETE history, no matter how much data exists
+// institute-wide.
+let currentDayLog = [];
+
+async function computeStudentDayLog(s, fromDateOverride, toDateOverride) {
+  const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',s.docId));
+  const snap = await getDocs(q);
+  const records = snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.checkIn);
+
+  // Latest record per calendar day (in the rare case of more than one check-in on the same day)
+  const recByDate = {};
+  records.forEach(r=>{
+    const ds = localDateStr(new Date(r.checkIn.seconds*1000));
+    const existing = recByDate[ds];
+    if (!existing || r.checkIn.seconds > existing.checkIn.seconds) recByDate[ds] = r;
+  });
+
+  const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
+  const leaveRanges = getStudentLeaveRanges(s.docId);
+  const facLeaveRanges = getFacultyLeaveRanges(s.faculty);
+
+  const fromDate = fromDateOverride ? new Date(fromDateOverride) : (s.trackingStartDate ? new Date(s.trackingStartDate.seconds*1000) : (s.admissionDate ? new Date(s.admissionDate.seconds*1000) : new Date()));
+  fromDate.setHours(0,0,0,0);
+  const toDate = toDateOverride ? new Date(toDateOverride) : new Date();
+  toDate.setHours(0,0,0,0);
+
+  const log = [];
+  const cursor = new Date(fromDate);
+  while (cursor <= toDate) {
+    const ds = localDateStr(cursor);
+    const scheduled = !schedDays.length || schedDays.includes(cursor.getDay());
+    const rec = recByDate[ds];
+    let status;
+    if (rec) {
+      status = rec.checkOut ? 'present' : 'present-active';
+    } else if (!scheduled) {
+      status = 'notScheduled';
+    } else if (isHolidayDate(cursor)) {
+      status = 'holiday';
+    } else if (isDateInLeaveRanges(cursor, leaveRanges)) {
+      status = 'onLeave';
+    } else if (isDateInLeaveRanges(cursor, facLeaveRanges)) {
+      status = 'facultyLeave';
+    } else {
+      status = 'absent';
+    }
+    log.push({ date: new Date(cursor), status, record: rec || null });
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return log.reverse(); // most recent first
+}
+window.computeStudentDayLog = computeStudentDayLog;
+
+async function openStudentDayLog(studentDocId) {
+  const s = allStudents.find(x => x.docId === studentDocId);
+  if (!s) { showToast('Student not found', 'error'); return; }
+  document.getElementById('dayLogModal').style.display = 'flex';
+  document.getElementById('dayLogTitle').textContent = `📅 ${s.name} — Full Day-by-Day Log`;
+  document.getElementById('dayLogStatusFilter').value = '';
+  document.getElementById('dayLogTable').innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:20px">Loading full history…</td></tr>';
+  try {
+    currentDayLog = await computeStudentDayLog(s);
+    renderDayLogSummary();
+    renderDayLog();
+  } catch(e) {
+    document.getElementById('dayLogTable').innerHTML = `<tr><td colspan="5" style="color:var(--red);text-align:center;padding:20px">Error: ${e.message}</td></tr>`;
+  }
+}
+window.openStudentDayLog = openStudentDayLog;
+
+function renderDayLogSummary() {
+  const counts = { present:0, absent:0, onLeave:0, facultyLeave:0, holiday:0, notScheduled:0 };
+  currentDayLog.forEach(d => {
+    const key = d.status === 'present-active' ? 'present' : d.status;
+    if (counts[key] !== undefined) counts[key]++;
+  });
+  document.getElementById('dayLogSummary').innerHTML = `
+    <div class="att-stat"><div class="av green">${counts.present}</div><div class="al">Present</div></div>
+    <div class="att-stat"><div class="av red">${counts.absent}</div><div class="al">Absent</div></div>
+    <div class="att-stat"><div class="av" style="color:#7A84FF">${counts.onLeave+counts.facultyLeave}</div><div class="al">On Leave</div></div>
+    <div class="att-stat"><div class="av" style="color:#F0C040">${counts.holiday}</div><div class="al">Holidays</div></div>`;
+}
+
+function renderDayLog() {
+  const filter = document.getElementById('dayLogStatusFilter').value;
+  const tb = document.getElementById('dayLogTable');
+  const filtered = filter ? currentDayLog.filter(d => (d.status === 'present-active' ? 'present' : d.status) === filter) : currentDayLog;
+  if (!filtered.length) { tb.innerHTML = '<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:20px">No matching days.</td></tr>'; return; }
+  tb.innerHTML = '';
+  filtered.forEach(d => {
+    let statusBadge, ci = '—', co = '—';
+    if (d.status === 'present' || d.status === 'present-active') {
+      statusBadge = d.status === 'present-active' ? '<span class="badge sd-present">🟢 Present (Live)</span>' : '<span class="badge sd-present">🟢 Present</span>';
+      if (d.record) {
+        ci = new Date(d.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+        co = d.record.checkOut ? new Date(d.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '—';
+      }
+    } else if (d.status === 'absent') {
+      statusBadge = '<span class="badge sd-absent">⚪ Absent</span>';
+    } else if (d.status === 'onLeave') {
+      statusBadge = '<span class="badge" style="background:rgba(76,175,130,0.15);color:var(--green);border:1px solid rgba(76,175,130,0.3)">🌴 Own Leave</span>';
+    } else if (d.status === 'facultyLeave') {
+      statusBadge = '<span class="badge" style="background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3)">🧳 Faculty Leave</span>';
+    } else if (d.status === 'holiday') {
+      statusBadge = '<span class="badge" style="background:rgba(240,192,64,0.15);color:#F0C040;border:1px solid rgba(240,192,64,0.3)">🎉 Holiday</span>';
+    } else {
+      statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border)">➖ Not Scheduled</span>';
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-size:12px">${d.date.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</td>
+      <td style="font-size:12px;color:var(--text3)">${d.date.toLocaleDateString('en-IN',{weekday:'short'})}</td>
+      <td>${statusBadge}</td>
+      <td style="font-size:12px">${ci}</td>
+      <td style="font-size:12px">${co}</td>`;
+    tb.appendChild(tr);
+  });
+}
+window.renderDayLog = renderDayLog;
+
 // ── STUDENT-FACING ANNOUNCEMENT ──
 // Single doc at cadd_config/announcement — { enabled, message, expiresAt, updatedAt }.
 // index.html shows it as a full-screen notice every time the app opens, for as long as
@@ -3387,7 +3671,7 @@ function scheduledDaysMissed(fromDate, attendanceDays, leaveRanges) {
   const today = new Date(now); today.setHours(0,0,0,0);
   cursor.setDate(cursor.getDate()+1); // start counting from the day AFTER their last attendance
   while (cursor <= today) {
-    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges)) missed++;
+    if ((!days.length || days.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, ranges) && !isHolidayDate(cursor)) missed++;
     cursor.setDate(cursor.getDate()+1);
   }
   return missed;
@@ -3473,7 +3757,7 @@ async function loadModalAttendance(docId, s) {
   let totalScheduledDays = 0;
   { const cursor = new Date(admDate);
     while (cursor <= today0) {
-      if ((!schedDays.length || schedDays.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, excludedRanges)) totalScheduledDays++;
+      if ((!schedDays.length || schedDays.includes(cursor.getDay())) && !isDateInLeaveRanges(cursor, excludedRanges) && !isHolidayDate(cursor)) totalScheduledDays++;
       cursor.setDate(cursor.getDate()+1);
     }
   }
@@ -3660,11 +3944,35 @@ async function autoCloseStaleAttendanceSessions() {
 // ── ATTENDANCE LOG ──
 async function loadAttendance() {
   await autoCloseStaleAttendanceSessions();
-  const q=query(collection(db,'cadd_attendance'),orderBy('checkIn','desc'),limit(200));
+  // Bumped from 200 to 4000 — 200 records institute-wide was getting used up within days for
+  // an active institute, silently dropping older records from the Streak column, Live Slots,
+  // and this table. This is still a cap (not unbounded, to keep initial load fast), but for a
+  // complete, guaranteed-not-truncated history for any ONE student, use "Pull Full Day-by-Day
+  // Log" above instead — that runs a dedicated per-student query with no cap at all.
+  const q=query(collection(db,'cadd_attendance'),orderBy('checkIn','desc'),limit(4000));
   const snap=await getDocs(q);
   allAttendance=snap.docs.map(d=>({id:d.id,...d.data()}));
   renderAttendance(allAttendance);
 }
+
+function populateAttLogStudentPicker() {
+  const sel = document.getElementById('attLogStudentPicker');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select Student…</option>' + allStudents
+    .filter(s => s.status !== 'deactivated')
+    .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+    .map(s => `<option value="${s.docId}">${s.name} (${s.studentId||'—'})</option>`).join('');
+  sel.value = cur;
+}
+window.populateAttLogStudentPicker = populateAttLogStudentPicker;
+
+function pullAttendanceLogStudent() {
+  const studentDocId = document.getElementById('attLogStudentPicker').value;
+  if (!studentDocId) { showToast('Select a student first', 'error'); return; }
+  openStudentDayLog(studentDocId); // same dedicated-query modal used from the student profile
+}
+window.pullAttendanceLogStudent = pullAttendanceLogStudent;
 
 // One-click force logout straight from the Attendance Log table, no need to open the student modal
 async function forceLogoutAttendanceRow(id) {
@@ -3966,9 +4274,10 @@ async function loadLiveSlots() {
     });
 
     liveSlotsData = {};
-    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[], facultyLeave:[], onLeave:[] }; });
+    allSlotNames.forEach(sn => { liveSlotsData[sn] = { present:[], left:[], absent:[], notScheduled:[], facultyLeave:[], onLeave:[], holiday:[] }; });
 
     const today0ForSlots = new Date(); today0ForSlots.setHours(0,0,0,0);
+    const isTodayHoliday = isHolidayDate(today0ForSlots);
     activeStudents.forEach(s=>{
       const slotName = s.slot || 'Unassigned';
       // Schedule-aware, same logic as the attendance-fix elsewhere: only students actually
@@ -3983,6 +4292,9 @@ async function loadLiveSlots() {
         liveSlotsData[slotName].present.push(entry);
       } else if (rec && rec.checkOut) {
         liveSlotsData[slotName].left.push(entry);
+      } else if (scheduledToday && isTodayHoliday) {
+        // Institute-wide holiday — applies to every student regardless of leave/faculty status.
+        liveSlotsData[slotName].holiday.push(entry);
       } else if (scheduledToday && studentOnLeaveToday) {
         // Student's own approved leave covers today — an excused absence, not a real one.
         liveSlotsData[slotName].onLeave.push(entry);
@@ -4003,13 +4315,13 @@ async function loadLiveSlots() {
 
     allSlotNames.forEach(sn=>{
       const d = liveSlotsData[sn];
-      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length + d.facultyLeave.length + d.onLeave.length;
+      const totalInSlot = d.present.length + d.left.length + d.absent.length + d.notScheduled.length + d.facultyLeave.length + d.onLeave.length + d.holiday.length;
       const div=document.createElement('div');
       div.className='slot-card';
       div.id='slot-card-'+cssSafe(sn);
       div.onclick=()=>showSlotDetail(sn);
       div.innerHTML=`<div class="sname">${sn}</div><div class="scount">${d.present.length}</div><div class="slabel">active now · ${totalInSlot} total in slot</div>
-        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span>${d.facultyLeave.length ? `<span>🧳 ${d.facultyLeave.length}</span>` : ''}${d.onLeave.length ? `<span>🌴 ${d.onLeave.length}</span>` : ''}</div>`;
+        <div class="smini"><span>🟢 ${d.present.length}</span><span>✅ ${d.left.length}</span><span>⚪ ${d.absent.length}</span><span>➖ ${d.notScheduled.length}</span>${d.facultyLeave.length ? `<span>🧳 ${d.facultyLeave.length}</span>` : ''}${d.onLeave.length ? `<span>🌴 ${d.onLeave.length}</span>` : ''}${d.holiday.length ? `<span>🎉 ${d.holiday.length}</span>` : ''}</div>`;
       grid.appendChild(div);
     });
   } catch(e) {
@@ -4051,7 +4363,7 @@ window.closeSlotDetail = closeSlotDetail;
 
 function populateSlotDetailFilterOptions(slotName) {
   const d = liveSlotsData[slotName]; if (!d) return;
-  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled, ...d.facultyLeave, ...d.onLeave];
+  const all = [...d.present, ...d.left, ...d.absent, ...d.notScheduled, ...d.facultyLeave, ...d.onLeave, ...d.holiday];
   const courses = new Set(all.map(e=>e.student.course).filter(Boolean));
   const faculties = new Set(all.map(e=>e.student.faculty).filter(Boolean));
   const courseSel = document.getElementById('slotDetailCourseFilter');
@@ -4084,6 +4396,7 @@ function renderSlotDetail() {
   d.notScheduled.forEach(e=>rows.push({...e, statusKey:'notScheduled'}));
   d.facultyLeave.forEach(e=>rows.push({...e, statusKey:'facultyLeave'}));
   d.onLeave.forEach(e=>rows.push({...e, statusKey:'onLeave'}));
+  d.holiday.forEach(e=>rows.push({...e, statusKey:'holiday'}));
 
   rows = rows.filter(row => {
     const s = row.student;
@@ -4099,7 +4412,7 @@ function renderSlotDetail() {
     return;
   }
 
-  const order = { present:0, left:1, absent:2, onLeave:3, facultyLeave:4, notScheduled:5 };
+  const order = { present:0, left:1, absent:2, holiday:3, onLeave:4, facultyLeave:5, notScheduled:6 };
   rows.sort((a,b)=> order[a.statusKey]-order[b.statusKey] || (a.student.name||'').localeCompare(b.student.name||''));
 
   tb.innerHTML='';
@@ -4123,6 +4436,8 @@ function renderSlotDetail() {
       statusBadge = '<span class="badge" style="background:rgba(122,132,255,0.15);color:#7A84FF;border:1px solid rgba(122,132,255,0.3)">🧳 Faculty on Leave</span>';
     } else if (row.statusKey==='onLeave') {
       statusBadge = '<span class="badge" style="background:rgba(76,175,130,0.15);color:var(--green);border:1px solid rgba(76,175,130,0.3)">🌴 Own Approved Leave</span>';
+    } else if (row.statusKey==='holiday') {
+      statusBadge = '<span class="badge" style="background:rgba(240,192,64,0.15);color:#F0C040;border:1px solid rgba(240,192,64,0.3)">🎉 Institute Holiday</span>';
     } else {
       statusBadge = '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text3);border:1px solid var(--border)">➖ Not Scheduled Today</span>';
     }
@@ -4153,6 +4468,8 @@ function showPage(id) {
   if(id==='feedback') loadFeedback();
   if(id==='leaveRequests') loadLeaveRequests();
   if(id==='facultyLeave') { populateAdminFacultyLeaveDropdown(); loadFacultyLeavePage(); }
+  if(id==='holidays') loadHolidaysPage();
+  if(id==='attendance') populateAttLogStudentPicker();
   if(id==='announcement') loadAnnouncementSettings();
 }
 
