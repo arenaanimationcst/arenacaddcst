@@ -2919,15 +2919,20 @@ window.openCurrentStudentDayLog = openCurrentStudentDayLog;
 
 function renderDayLogSummary() {
   const counts = { present:0, absent:0, onLeave:0, facultyLeave:0, holiday:0, notScheduled:0 };
+  let totalHrs = 0;
   currentDayLog.forEach(d => {
     const key = d.status === 'present-active' ? 'present' : d.status;
     if (counts[key] !== undefined) counts[key]++;
+    if (d.record && d.record.checkOut) {
+      totalHrs += (d.record.checkOut.seconds - d.record.checkIn.seconds) / 3600;
+    }
   });
   document.getElementById('dayLogSummary').innerHTML = `
     <div class="att-stat"><div class="av green">${counts.present}</div><div class="al">Present</div></div>
     <div class="att-stat"><div class="av red">${counts.absent}</div><div class="al">Absent</div></div>
     <div class="att-stat"><div class="av" style="color:#7A84FF">${counts.onLeave+counts.facultyLeave}</div><div class="al">On Leave</div></div>
-    <div class="att-stat"><div class="av" style="color:#F0C040">${counts.holiday}</div><div class="al">Holidays</div></div>`;
+    <div class="att-stat"><div class="av" style="color:#F0C040">${counts.holiday}</div><div class="al">Holidays</div></div>
+    <div class="att-stat"><div class="av orange">${totalHrs.toFixed(1)}h</div><div class="al">Total Hours</div></div>`;
 }
 
 function renderDayLog() {
