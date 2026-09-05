@@ -1475,10 +1475,25 @@ async function loadLeaveRequestStatus() {
       revokeBtn.style.display = 'none';
     } else if (latest && latest.status === 'approved') {
       const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-      statusText.textContent = `✅ Your leave (${range}) was approved.`;
-      statusBox.style.display = 'block';
-      btn.style.display = 'none'; // don't offer a new request while one is already active
-      revokeBtn.style.display = 'block'; // "I'm back" — let them end it themselves
+      // A dated leave that has already run its full course (today is past dateTo) needs no
+      // action from the student — it should just stay a clean "Approved" record forever.
+      // Previously the "I'm Back" button stayed visible indefinitely, with no check against
+      // dateTo — so a student could tap it days or weeks after their leave had already ended,
+      // which flipped status to 'revoked' and (before the getStudentLeaveRanges fix) wiped out
+      // every already-elapsed day of an already-approved leave, turning it into "Absent".
+      const todayStr = new Date().toISOString().slice(0,10);
+      const leaveIsOver = latest.dateTo && todayStr > latest.dateTo;
+      if (leaveIsOver) {
+        statusText.textContent = `✅ Your leave (${range}) was approved and has ended.`;
+        statusBox.style.display = 'block';
+        btn.style.display = 'block'; // free to submit a new request now
+        revokeBtn.style.display = 'none';
+      } else {
+        statusText.textContent = `✅ Your leave (${range}) was approved.`;
+        statusBox.style.display = 'block';
+        btn.style.display = 'none'; // don't offer a new request while one is already active
+        revokeBtn.style.display = 'block'; // "I'm back" — let them end it themselves, while it's still current
+      }
     } else {
       if (latest && latest.status === 'revoked') {
         const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
