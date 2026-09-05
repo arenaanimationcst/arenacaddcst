@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CADDesk CST — Faculty Panel</title>
   <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <script>emailjs.init('00R665dFCAdBZk8Zq');</script>
   <style>
     :root {
       --orange:#F47920; --orange-dark:#D4641A;
@@ -161,6 +163,50 @@
     table tbody td{padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;}
     table tbody tr:last-child td{border-bottom:none;}
 
+    /* ADD STUDENT FORM (ported from admin.html) */
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+    .f-group{display:flex;flex-direction:column;gap:6px;}
+    .f-group label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.6px;}
+    .f-group input,.f-group select,.f-group textarea{
+      background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:8px;
+      color:#fff;padding:10px 13px;font-size:13px;font-family:'Inter',sans-serif;outline:none;
+    }
+    .f-group input:focus,.f-group select:focus,.f-group textarea:focus{border-color:var(--orange);}
+    .f-group select option{background:var(--dark);}
+    .f-span2{grid-column:span 2;}
+
+    .id-preview{background:rgba(244,121,32,0.08);border:1px solid rgba(244,121,32,0.25);border-radius:8px;padding:12px 16px;margin-top:8px;}
+    .id-preview .id-val{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--orange);}
+    .id-preview .id-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+
+    .weekday-picker{display:flex;gap:7px;flex-wrap:wrap;}
+    .wd-btn{
+      width:38px;height:38px;border-radius:9px;border:1px solid var(--border);
+      background:rgba(255,255,255,0.05);color:var(--text2);font-size:13px;font-weight:600;
+      font-family:'Inter',sans-serif;cursor:pointer;transition:all 0.15s;
+    }
+    .wd-btn:hover{border-color:var(--orange);}
+    .wd-btn.on{background:var(--orange);border-color:var(--orange);color:#fff;}
+    .module-hint{font-size:11px;color:var(--text3);margin-top:7px;text-transform:none;letter-spacing:normal;line-height:1.5;}
+
+    .module-picker{display:flex;flex-direction:column;gap:0;border:1px solid var(--border);border-radius:9px;overflow:hidden;max-height:280px;overflow-y:auto;}
+    .module-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.02);}
+    .module-row:last-child{border-bottom:none;}
+    .module-row input[type="checkbox"]{width:auto;accent-color:var(--orange);cursor:pointer;flex-shrink:0;}
+    .module-row .m-name{flex:1;font-size:13px;font-weight:500;color:var(--text);}
+    .module-row .m-cat{font-size:10px;color:var(--text3);background:rgba(255,255,255,0.06);padding:2px 8px;border-radius:10px;flex-shrink:0;}
+    .module-row input[type="number"]{
+      width:54px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;
+      color:#fff;padding:5px 7px;font-size:12px;text-align:center;outline:none;flex-shrink:0;
+    }
+    .module-row .m-dur-label{font-size:10px;color:var(--text3);flex-shrink:0;}
+    .module-row.checked{background:rgba(244,121,32,0.06);}
+
+    @media(max-width:768px){
+      .form-grid{grid-template-columns:1fr;}
+      .f-span2{grid-column:span 1;}
+    }
+
     .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--dark);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:500;box-shadow:0 8px 32px rgba(0,0,0,0.4);z-index:9999;opacity:0;transition:opacity 0.3s;white-space:nowrap;pointer-events:none;}
     .toast.show{opacity:1;}
     .toast.success{border-color:var(--green);color:var(--green);}
@@ -224,6 +270,7 @@
     <button class="tab-btn" id="tab-feedback" onclick="switchFacTab('feedback')">💬 Feedback</button>
     <button class="tab-btn" id="tab-leave" onclick="switchFacTab('leave')">🌴 Leave Requests</button>
     <button class="tab-btn" id="tab-myleave" onclick="switchFacTab('myleave')">🧳 My Leave</button>
+    <button class="tab-btn" id="tab-addstudent" onclick="switchFacTab('addstudent')">➕ Add Student</button>
   </div>
 
   <!-- ATTENDANCE LOG TAB (this faculty's own students only) -->
@@ -300,6 +347,88 @@
   <!-- MY STUDENTS TAB -->
   <div id="facTabStudents" style="display:none">
     <div id="studentsList"><div class="empty-state"><div class="icon">👤</div>Loading…</div></div>
+  </div>
+
+  <!-- ADD STUDENT TAB — faculty can add their own students directly, same as admin's Add
+       Student flow, minus edit/delete rights (admin-only) and minus per-module faculty
+       assignment (every module the faculty ticks here is auto-assigned to themselves, since
+       they're adding their own student). -->
+  <div id="facTabAddStudent" style="display:none">
+    <p style="color:var(--text3);font-size:12px;margin-bottom:14px">
+      Students you add here appear under "My Students" immediately, and get the same welcome email with their login ID & password as when admin adds them.
+    </p>
+    <div class="card" style="max-width:600px">
+      <div class="form-grid">
+        <div class="f-group">
+          <label>Full Name *</label>
+          <input type="text" id="fs-name" placeholder="e.g. Faiz Riaz" oninput="generateFacId()"/>
+        </div>
+        <div class="f-group">
+          <label>Phone Number *</label>
+          <input type="tel" id="fs-phone" placeholder="10-digit number"/>
+        </div>
+        <div class="f-group f-span2">
+          <label>Email Address *</label>
+          <input type="email" id="fs-email" placeholder="student@email.com"/>
+        </div>
+        <div class="f-group">
+          <label>Course Track *</label>
+          <select id="fs-course">
+            <option value="">Select Course</option>
+            <option>Interiors</option><option>Mechanical</option><option>Civil</option>
+            <option>Architecture</option><option>Basic CAD</option><option>VFX</option>
+            <option>Animation</option><option>Gaming</option><option>Graphics</option>
+            <option>3D Visualisation</option><option>Others</option>
+          </select>
+        </div>
+        <div class="f-group">
+          <label>Slot</label>
+          <select id="fs-slot"><option value="">Select Slot</option></select>
+        </div>
+        <div class="f-group">
+          <label>Admission Date</label>
+          <input type="date" id="fs-admDate" onchange="autoFillFacValidityDate()"/>
+        </div>
+        <div class="f-group">
+          <label>Course Validity End Date</label>
+          <input type="date" id="fs-validityDate"/>
+          <div class="module-hint">Auto-suggested as 1 year from admission — change if the course duration is different.</div>
+        </div>
+        <div class="f-group f-span2">
+          <label>Software Modules *</label>
+          <div class="module-picker" id="fs-modulePicker"></div>
+          <div class="module-hint">Tick the software this student is enrolled for — these will be assigned to you as their faculty.</div>
+        </div>
+        <div class="f-group f-span2">
+          <label>Attendance Days *</label>
+          <div class="weekday-picker" id="fs-weekdayPicker">
+            <button type="button" class="wd-btn" data-day="0">S</button>
+            <button type="button" class="wd-btn" data-day="1">M</button>
+            <button type="button" class="wd-btn" data-day="2">T</button>
+            <button type="button" class="wd-btn" data-day="3">W</button>
+            <button type="button" class="wd-btn" data-day="4">T</button>
+            <button type="button" class="wd-btn" data-day="5">F</button>
+            <button type="button" class="wd-btn" data-day="6">S</button>
+          </div>
+          <div class="module-hint">Select the days this student is expected to attend (e.g. Mon/Wed/Fri).</div>
+        </div>
+        <div class="f-group f-span2">
+          <label>Generated Credentials</label>
+          <div class="id-preview">
+            <div class="id-val" id="fsGenIdDisplay">—</div>
+            <div class="id-sub">Student ID · Password: <strong id="fsGenPwDisplay">—</strong></div>
+          </div>
+        </div>
+        <div class="f-group f-span2" style="flex-direction:row;align-items:center;gap:8px">
+          <input type="checkbox" id="fs-sendEmail" checked style="width:auto;accent-color:var(--orange)"/>
+          <label style="text-transform:none;font-size:13px;color:var(--text2)">Email login ID & password to student on creation</label>
+        </div>
+      </div>
+      <div style="margin-top:20px;display:flex;gap:10px">
+        <button class="btn btn-orange" onclick="saveFacNewStudent()">✅ Create Student</button>
+        <button class="btn btn-ghost" onclick="resetFacAddForm()">Clear</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -583,11 +712,251 @@ async function loadDashboard() {
   await loadFacultyLeaveForStreaks(); // ditto, so the Streak column excludes approved faculty-leave days
   await loadStudentLeaveForStreaks(); // ditto, so it also excludes each student's own approved leave days
   await loadHolidaysForStreaks(); // ditto, so it also excludes institute-wide holidays
+  await loadFacSlots(); // populates the Slot dropdown on the Add Student tab
 
   renderStats();
   renderPendingApprovals();
   renderMyStudents();
+  renderFacModulePicker('fs-modulePicker');
+  renderFacWeekdayPicker('fs-weekdayPicker', fs_selectedDays);
 }
+
+
+// ── ADD STUDENT (faculty) — module catalogue ported verbatim from admin.html so the data
+// shape (modId, category, defaultWeeks, syllabus session counts) always matches exactly.
+// Keep this in sync with admin.html's copy if the catalogue ever changes there.
+const MODULE_CATALOGUE = [
+  { id:'autocad2d_civil', name:'AutoCAD 2D Civil', category:'Civil', defaultWeeks:4 },
+  { id:'autocad3d', name:'AutoCAD 3D', category:'Design', defaultWeeks:3 },
+  { id:'3dsmax', name:'3ds Max', category:'Visualisation', defaultWeeks:6 },
+  { id:'vray_max', name:'V-Ray for 3ds Max', category:'Visualisation', defaultWeeks:3 },
+  { id:'revit_a', name:'Revit - A', category:'BIM', defaultWeeks:5 },
+  { id:'sketchup', name:'SketchUp', category:'Design', defaultWeeks:3 },
+  { id:'vray_sketchup', name:'V-Ray for SketchUp', category:'Visualisation', defaultWeeks:2 },
+  { id:'autocad2d_mech', name:'AutoCAD 2D Mechanical', category:'Mechanical', defaultWeeks:4 },
+  { id:'solidworks', name:'SolidWorks', category:'Mechanical', defaultWeeks:6 },
+  { id:'photoshop', name:'Photoshop', category:'Graphics', defaultWeeks:3 },
+  { id:'lumion', name:'Lumion', category:'Visualisation', defaultWeeks:2 },
+  { id:'manual_drafting', name:'Manual Drafting', category:'Foundation', defaultWeeks:2 }
+];
+
+// Helper: get session list for a module — real syllabus if available, else generic placeholders
+function getSyllabusForModule(modId, weeks) {
+  if (SYLLABUS_CATALOGUE[modId]) {
+    return SYLLABUS_CATALOGUE[modId].sessions;
+  }
+  // Fallback: generic numbered sessions based on duration (2 sessions/week default)
+  const count = Math.max(1, (weeks || 1) * 2);
+  const generic = [];
+  for (let i = 1; i <= count; i++) {
+    generic.push({ num: i, title: `Session ${i}`, topics: '' });
+  }
+  return generic;
+}
+
+let fs_selectedDays = new Set();
+let facSlots = [];
+
+// Loads the slot list admin configured (cadd_config/slots) so the Add Student form's Slot
+// dropdown has real options. Faculty can't add/remove slots themselves — admin-only, in Settings.
+async function loadFacSlots() {
+  try {
+    const sd = await getDoc(doc(db, 'cadd_config', 'slots'));
+    facSlots = sd.exists() ? (sd.data().list || []) : [];
+  } catch (e) { facSlots = []; }
+  const sel = document.getElementById('fs-slot');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select Slot</option>' + facSlots.map(s => `<option value="${s}">${s}</option>`).join('');
+    sel.value = cur;
+  }
+}
+
+function generateFacId() {
+  const name = document.getElementById('fs-name').value.trim();
+  if (!name) { document.getElementById('fsGenIdDisplay').textContent = '—'; document.getElementById('fsGenPwDisplay').textContent = '—'; return; }
+  const first = name.split(' ')[0].toLowerCase().replace(/[^a-z]/g, '');
+  const num = Math.floor(100 + Math.random() * 900);
+  const sid = first + '@' + num;
+  const pw = first.charAt(0).toUpperCase() + first.slice(1) + '@' + num;
+  document.getElementById('fsGenIdDisplay').textContent = sid;
+  document.getElementById('fsGenPwDisplay').textContent = pw;
+}
+window.generateFacId = generateFacId;
+
+// Suggests validity end date = admission date + 1 year, same as admin.html, only if the
+// field is still empty so it never overwrites a value already typed in.
+function autoFillFacValidityDate() {
+  const admVal = document.getElementById('fs-admDate').value;
+  const validityField = document.getElementById('fs-validityDate');
+  if (admVal && !validityField.value) {
+    const d = new Date(admVal);
+    d.setFullYear(d.getFullYear() + 1);
+    validityField.value = d.toISOString().slice(0, 10);
+  }
+}
+window.autoFillFacValidityDate = autoFillFacValidityDate;
+
+// Simplified module picker for faculty — no per-module faculty dropdown, since every module
+// ticked here is auto-assigned to the logged-in faculty (they're adding their own student).
+function renderFacModulePicker(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  MODULE_CATALOGUE.forEach(mod => {
+    const row = document.createElement('div');
+    row.className = 'module-row';
+    row.dataset.modId = mod.id;
+    row.innerHTML = `
+      <input type="checkbox" onchange="toggleFacModuleRow(this)"/>
+      <span class="m-name">${mod.name}</span>
+      <span class="m-cat">${mod.category}</span>
+      <span class="m-dur-label">wks</span>
+      <input type="number" min="1" max="52" value="${mod.defaultWeeks}" disabled class="m-weeks-input"/>
+    `;
+    container.appendChild(row);
+  });
+}
+window.renderFacModulePicker = renderFacModulePicker;
+
+function toggleFacModuleRow(checkbox) {
+  const row = checkbox.closest('.module-row');
+  const numInput = row.querySelector('.m-weeks-input');
+  if (checkbox.checked) { row.classList.add('checked'); numInput.disabled = false; }
+  else { row.classList.remove('checked'); numInput.disabled = true; }
+}
+window.toggleFacModuleRow = toggleFacModuleRow;
+
+// Builds the `modules` object for a brand-new student, auto-assigning every ticked module
+// to the currently logged-in faculty (fromSession 1 through the module's full session count) —
+// this is what makes the new student immediately show up under that faculty's "My Students".
+function getFacSelectedModules(containerId) {
+  const container = document.getElementById(containerId);
+  const result = {};
+  container.querySelectorAll('.module-row').forEach(row => {
+    const cb = row.querySelector('input[type="checkbox"]');
+    if (!cb.checked) return;
+    const modId = row.dataset.modId;
+    const weeks = parseInt(row.querySelector('.m-weeks-input').value) || 1;
+    const modDef = MODULE_CATALOGUE.find(m => m.id === modId);
+    const syllabusSessions = getSyllabusForModule(modId, weeks);
+    const totalSessions = syllabusSessions.length;
+    const sessions = {};
+    for (let n = 1; n <= totalSessions; n++) {
+      sessions[n] = { studentTicked: false, tickedAt: null, approved: false, approvedBy: null, approvedAt: null, autoTicked: false, practiceCount: 0, lastPracticedAt: null };
+    }
+    result[modId] = {
+      name: modDef.name,
+      category: modDef.category,
+      weeks,
+      totalSessions,
+      facultyAssignments: [{ facultyId: currentFaculty.docId, facultyName: currentFaculty.name, fromSession: 1, toSession: totalSessions }],
+      sessions
+    };
+  });
+  return result;
+}
+
+function renderFacWeekdayPicker(containerId, selectedSet) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.wd-btn').forEach(btn => {
+    const day = parseInt(btn.dataset.day);
+    btn.classList.toggle('on', selectedSet.has(day));
+    btn.onclick = () => {
+      if (selectedSet.has(day)) selectedSet.delete(day);
+      else selectedSet.add(day);
+      btn.classList.toggle('on');
+    };
+  });
+}
+
+// Same welcome-email flow as admin.html's sendWelcomeEmail — same EmailJS service/template,
+// so the student gets an identical email whether admin or faculty created their account.
+const EMAILJS_SERVICE = 'service_ps84vnc';
+const EMAILJS_WELCOME_TEMPLATE = 'template_aakk1qc';
+async function sendFacWelcomeEmail(s) {
+  if (!s.email) { showToast('No email on file for this student', 'error'); return; }
+  try {
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_WELCOME_TEMPLATE, {
+      to_email: s.email,
+      student_name: s.name,
+      student_id: s.studentId,
+      student_password: s.password,
+      student_course: s.course || '—',
+      login_url: 'https://arenaanimationcst.github.io/arenacaddcst/'
+    });
+    showToast('Welcome email sent to ' + s.email, 'success');
+  } catch (e) {
+    showToast('Email failed: ' + (e.text || e.message || 'Unknown error'), 'error');
+    console.error('EmailJS error:', e);
+  }
+}
+
+async function saveFacNewStudent() {
+  const name = document.getElementById('fs-name').value.trim();
+  const phone = document.getElementById('fs-phone').value.trim();
+  const email = document.getElementById('fs-email').value.trim();
+  const course = document.getElementById('fs-course').value;
+  const slot = document.getElementById('fs-slot').value;
+  const admDateVal = document.getElementById('fs-admDate').value;
+  const validityDateVal = document.getElementById('fs-validityDate').value;
+  const studentId = document.getElementById('fsGenIdDisplay').textContent;
+  const password = document.getElementById('fsGenPwDisplay').textContent;
+  const modules = getFacSelectedModules('fs-modulePicker');
+  const attendanceDays = Array.from(fs_selectedDays).sort();
+
+  if (!name || !phone || !email || !course || studentId === '—') {
+    showToast('Fill all required fields and generate ID', 'error'); return;
+  }
+  if (Object.keys(modules).length === 0) {
+    showToast('Select at least one software module', 'error'); return;
+  }
+  if (attendanceDays.length === 0) {
+    showToast('Select at least one attendance day', 'error'); return;
+  }
+
+  try {
+    const data = {
+      name, phone, email, course,
+      faculty: currentFaculty.docId, // this student's assigned faculty is whoever is adding them
+      slot, studentId, password,
+      modules, attendanceDays,
+      status: 'active',
+      admissionDate: admDateVal ? Timestamp.fromDate(new Date(admDateVal)) : Timestamp.now(),
+      // Same distinction as admin.html: admissionDate is the student's real-world join date;
+      // trackingStartDate is when the app started tracking them — same day for a new student.
+      trackingStartDate: Timestamp.now(),
+      validityEndDate: validityDateVal ? Timestamp.fromDate(new Date(validityDateVal)) : null,
+      createdAt: Timestamp.now(),
+      createdBy: currentFaculty.name, // audit trail — lets admin see which faculty added whom
+      createdByRole: 'faculty'
+    };
+    const newDocRef = await addDoc(collection(db, 'cadd_students'), data);
+    showToast('Student created! ID: ' + studentId, 'success');
+
+    const shouldEmail = document.getElementById('fs-sendEmail').checked;
+    if (shouldEmail) {
+      await sendFacWelcomeEmail({ docId: newDocRef.id, ...data });
+    }
+
+    resetFacAddForm();
+    await loadDashboard(); // refresh My Students / stats so the new student shows up immediately
+  } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+window.saveFacNewStudent = saveFacNewStudent;
+
+function resetFacAddForm() {
+  ['fs-name', 'fs-phone', 'fs-email', 'fs-admDate', 'fs-validityDate'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fs-course').value = '';
+  document.getElementById('fs-slot').value = '';
+  document.getElementById('fsGenIdDisplay').textContent = '—';
+  document.getElementById('fsGenPwDisplay').textContent = '—';
+  fs_selectedDays.clear();
+  renderFacWeekdayPicker('fs-weekdayPicker', fs_selectedDays);
+  renderFacModulePicker('fs-modulePicker');
+}
+window.resetFacAddForm = resetFacAddForm;
 
 function renderStats() {
   let pendingCount = 0, approvedCount = 0;
@@ -732,6 +1101,7 @@ function switchFacTab(tab) {
   document.getElementById('facTabFeedback').style.display = tab === 'feedback' ? 'block' : 'none';
   document.getElementById('facTabLeave').style.display = tab === 'leave' ? 'block' : 'none';
   document.getElementById('facTabMyLeave').style.display = tab === 'myleave' ? 'block' : 'none';
+  document.getElementById('facTabAddStudent').style.display = tab === 'addstudent' ? 'block' : 'none';
   document.getElementById('tab-pending').classList.toggle('active', tab === 'pending');
   document.getElementById('tab-students').classList.toggle('active', tab === 'students');
   document.getElementById('tab-live').classList.toggle('active', tab === 'live');
@@ -739,6 +1109,7 @@ function switchFacTab(tab) {
   document.getElementById('tab-feedback').classList.toggle('active', tab === 'feedback');
   document.getElementById('tab-leave').classList.toggle('active', tab === 'leave');
   document.getElementById('tab-myleave').classList.toggle('active', tab === 'myleave');
+  document.getElementById('tab-addstudent').classList.toggle('active', tab === 'addstudent');
   if (tab === 'live') loadLiveSlots();
   if (tab === 'attlog') loadFacAttendance();
   if (tab === 'feedback') loadFacFeedback();
