@@ -2595,16 +2595,34 @@ function isDateInLeaveRanges(date, ranges) {
 function getStudentLeaveRanges(studentDocId) {
   if (!studentDocId) return [];
   return allLeaveRequests
-    .filter(r => r.studentDocId === studentDocId && r.status === 'approved')
+    // Include 'revoked' alongside 'approved'. A revoke ("I'm Back — End My Leave", by the
+    // student or by admin) only means "the leave ended early from this point on" — the days
+    // BEFORE that point were a real, approved, excused absence and must stay excluded. Only
+    // 'approved' records ever fall through to the legacy dateless fallback below, since a
+    // revoke with no date range has nothing reliable to cap.
+    .filter(r => r.studentDocId === studentDocId && (r.status === 'approved' || r.status === 'revoked'))
     .map(r => {
       if (r.dateFrom && r.dateTo) {
-        return { from: new Date(r.dateFrom+'T00:00:00'), to: new Date(r.dateTo+'T23:59:59') };
+        let to = new Date(r.dateTo+'T23:59:59');
+        if (r.status === 'revoked' && r.revokedAt) {
+          // Ended early — exclude only through the day BEFORE they came back, not the full
+          // original range. FIX: previously ANY revoke (including one triggered long after the
+          // leave had already ended, via a stale "I'm Back" button with no date check) wiped out
+          // the WHOLE range — retroactively turning already-approved, already-elapsed days into
+          // "Absent". Now only the still-future portion of the range is given back.
+          const cameBackDay = new Date(r.revokedAt.seconds*1000); cameBackDay.setHours(0,0,0,0);
+          const dayBefore = new Date(cameBackDay); dayBefore.setDate(dayBefore.getDate()-1); dayBefore.setHours(23,59,59,999);
+          if (dayBefore < to) to = dayBefore;
+        }
+        const from = new Date(r.dateFrom+'T00:00:00');
+        if (to < from) return null; // revoked on/before the leave's first day — nothing left to exclude
+        return { from, to };
       }
       // Legacy leave request — approved before the date-range field existed on this form.
       // Without a fix, these silently contributed ZERO excluded days (the old filter required
       // dateFrom && dateTo), so a genuinely-approved leave would still show every day as
       // "Absent". Best-effort fallback: treat it as a single day, the day it was requested.
-      if (r.requestedAt) {
+      if (r.status === 'approved' && r.requestedAt) {
         const d = new Date(r.requestedAt.seconds*1000); d.setHours(0,0,0,0);
         const end = new Date(d); end.setHours(23,59,59,999);
         return { from: d, to: end };
