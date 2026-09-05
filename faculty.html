@@ -389,14 +389,27 @@ async function loadStudentLeaveForStreaks() {
 function getStudentLeaveRanges(studentDocId) {
   if (!studentDocId) return [];
   return allStudentLeaveForStreaks
-    .filter(r => r.studentDocId === studentDocId && r.status === 'approved')
+    // Include 'revoked' alongside 'approved' — a revoke only ends the leave early from that
+    // point on; days before it was already an excused absence and must stay excluded.
+    // Mirrors admin.html's identical fix.
+    .filter(r => r.studentDocId === studentDocId && (r.status === 'approved' || r.status === 'revoked'))
     .map(r => {
       if (r.dateFrom && r.dateTo) {
-        return { from: new Date(r.dateFrom + 'T00:00:00'), to: new Date(r.dateTo + 'T23:59:59') };
+        let to = new Date(r.dateTo + 'T23:59:59');
+        if (r.status === 'revoked' && r.revokedAt) {
+          // Ended early — only exclude through the day BEFORE they came back, not the full
+          // original range. Mirrors admin.html's identical fix.
+          const cameBackDay = new Date(r.revokedAt.seconds*1000); cameBackDay.setHours(0,0,0,0);
+          const dayBefore = new Date(cameBackDay); dayBefore.setDate(dayBefore.getDate()-1); dayBefore.setHours(23,59,59,999);
+          if (dayBefore < to) to = dayBefore;
+        }
+        const from = new Date(r.dateFrom + 'T00:00:00');
+        if (to < from) return null;
+        return { from, to };
       }
       // Legacy leave request without dates — fall back to a single day (the day requested)
       // instead of silently contributing zero excluded days. Mirrors admin.html's identical fix.
-      if (r.requestedAt) {
+      if (r.status === 'approved' && r.requestedAt) {
         const d = new Date(r.requestedAt.seconds*1000); d.setHours(0,0,0,0);
         const end = new Date(d); end.setHours(23,59,59,999);
         return { from: d, to: end };
