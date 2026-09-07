@@ -1203,7 +1203,14 @@ async function loadDashboard() {
   const allowedDays = s.attendanceDays || [];
   const isTodayAllowed = allowedDays.length === 0 || allowedDays.includes(todayDay);
 
-  if (s.status === 'on_leave') {
+  // Resolve leave status BEFORE deciding the badge/action-card below, and use its return
+  // value rather than the raw stored s.status field — that field only updates on an explicit
+  // revoke action, so a leave that simply ran out its date range with nobody clicking
+  // anything used to leave the badge/check-in permanently stuck on "On Leave". This call also
+  // self-heals the stored field and refreshes the Leave tab UI in the same pass.
+  const isOnLeaveNow = await loadLeaveRequestStatus();
+
+  if (isOnLeaveNow) {
     badge.className='badge leave'; badge.textContent='On Leave';
     document.getElementById('leaveBanner').style.display='flex';
     document.getElementById('actionCard').style.display='none';
@@ -1226,7 +1233,6 @@ async function loadDashboard() {
   await loadCalendarLog();
   await checkActiveSession();
   await loadFeedbackSection();
-  await loadLeaveRequestStatus();
   startClock();
 }
 
@@ -1466,6 +1472,7 @@ async function loadLeaveRequestStatus() {
     const statusText = document.getElementById('leaveRequestStatusText');
     const btn = document.getElementById('leaveRequestBtn');
     const revokeBtn = document.getElementById('leaveRevokeBtn');
+    let isOnLeaveNow = false;
 
     if (latest && latest.status === 'pending') {
       const range = latest.dateFrom ? `${latest.dateFrom} → ${latest.dateTo}` : new Date(latest.requestedAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
@@ -1493,6 +1500,7 @@ async function loadLeaveRequestStatus() {
         statusBox.style.display = 'block';
         btn.style.display = 'none'; // don't offer a new request while one is already active
         revokeBtn.style.display = 'block'; // "I'm back" — let them end it themselves, while it's still current
+        isOnLeaveNow = true;
       }
     } else {
       if (latest && latest.status === 'revoked') {
@@ -1509,8 +1517,29 @@ async function loadLeaveRequestStatus() {
       btn.style.display = 'block';
       revokeBtn.style.display = 'none';
     }
+
+    // Self-heal: the student's own `status` field only ever gets flipped back to 'active' by
+    // an explicit revoke action (self "I'm Back" or admin Revoke). A leave that simply runs
+    // out its date range with nobody clicking anything — increasingly likely now that the
+    // "I'm Back" button itself only shows up while the leave is still current — used to leave
+    // the student permanently stuck as "on_leave", silently blocked from checking in, until
+    // an admin happened to notice and fix it by hand. Now it corrects itself the next time the
+    // student opens the app, no manual intervention needed.
+    if (!isOnLeaveNow && currentStudent.status === 'on_leave') {
+      try {
+        await updateDoc(doc(db, 'cadd_students', currentStudent.docId), { status: 'active' });
+        currentStudent.status = 'active';
+      } catch (healErr) {
+        console.error('Leave self-heal failed:', healErr);
+      }
+    }
+    return isOnLeaveNow;
   } catch(e) {
     console.error('Leave request status error:', e);
+    // Fetch failed — fall back to whatever the stored field says rather than guessing "active"
+    // and potentially letting someone check in while a leave that's still genuinely active
+    // just couldn't be confirmed this time.
+    return currentStudent.status === 'on_leave';
   }
 }
 window.loadLeaveRequestStatus = loadLeaveRequestStatus;
