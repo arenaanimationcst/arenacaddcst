@@ -3947,6 +3947,27 @@ async function saveEditStudent() {
     showToast('Saved without a dated leave record — this student won\'t be excluded from absence stats or get a revoke option', 'warning');
   }
 
+  // Symmetric fix for the reverse direction: saving status as "Active" here must also close
+  // out any of this student's leave requests still sitting as 'approved'. Without this, a
+  // leave request can stay 'approved' forever — and since the student's own app now derives
+  // "am I on leave right now" purely from the leave request (not this status field, which
+  // used to be the only source of truth before the self-heal fix), it keeps showing them as
+  // on leave and re-blocking check-in the next time they open the app, completely ignoring
+  // this edit. Runs on every save-as-Active, not just prevStatus==='on_leave' — that covers
+  // an already-drifted case too, where an earlier incomplete attempt left the student doc
+  // saying 'active' while the underlying leave request was never actually closed, so a plain
+  // "it's already Active, why isn't this working" re-save fixes it rather than needing the
+  // dropdown to be flipped away and back first.
+  if (newStatus === 'active') {
+    const openRequests = (allLeaveRequests || []).filter(r => r.studentDocId === editingStudentId && r.status === 'approved');
+    for (const r of openRequests) {
+      try {
+        await updateDoc(doc(db,'cadd_leave_requests', r.id), { status: 'revoked', revokedAt: Timestamp.now() });
+        r.status = 'revoked'; r.revokedAt = Timestamp.now();
+      } catch (e) { console.error('Failed to close leave request', r.id, e); }
+    }
+  }
+
   const data={
     name:document.getElementById('ed-name').value.trim(),
     phone:document.getElementById('ed-phone').value.trim(),
