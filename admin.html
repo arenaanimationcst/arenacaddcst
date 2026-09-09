@@ -1657,7 +1657,53 @@ async function removeFaculty(i) {
 async function loadStudents() {
   const snap=await getDocs(collection(db,'cadd_students'));
   allStudents=snap.docs.map(d=>({docId:d.id,...d.data()}));
+  await healStaleOnLeaveStudents(); // BEFORE filterStudents(), so the very first render is already correct
   filterStudents();
+}
+
+// Mirrors index.html's student-side self-heal, on the admin side. A student flagged
+// 'on_leave' whose leave has actually already run its course (today past dateTo) used to
+// stay stuck showing "On Leave" in the admin panel indefinitely — even after a refresh —
+// until either that student happened to open their own app (triggering the OTHER self-heal)
+// or an admin manually re-saved them as Active via Edit Student. Now it corrects itself right
+// here, every time the student list loads — both the lingering 'approved' leave request and
+// the student's own status field, exactly like the Edit Student fix does, just automatic.
+// Leaves with no dateTo (legacy requests from before date ranges existed on the form) can't
+// be judged "over" from a date alone, so those are deliberately left alone here, same as the
+// student-side self-heal — those still need an explicit admin revoke.
+async function healStaleOnLeaveStudents() {
+  const staleCandidates = allStudents.filter(s => s.status === 'on_leave');
+  if (!staleCandidates.length) return;
+
+  // Load order at app init has loadStudents() run before loadLeaveRequests(), so fetch fresh
+  // here if it isn't populated yet rather than depending on that order.
+  if (!allLeaveRequests.length) {
+    try {
+      const snap = await getDocs(query(collection(db,'cadd_leave_requests'), orderBy('requestedAt','desc')));
+      allLeaveRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) { console.error('Self-heal: failed to load leave requests', e); return; }
+  }
+
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  for (const s of staleCandidates) {
+    const theirRequests = allLeaveRequests.filter(r => r.studentDocId === s.docId);
+    const latest = theirRequests.sort((a,b)=>(b.requestedAt?.seconds||0)-(a.requestedAt?.seconds||0))[0];
+    const stillOnLeave = !!(latest && latest.status === 'approved' && (!latest.dateTo || todayStr <= latest.dateTo));
+    if (stillOnLeave) continue; // genuinely still on leave (or an undated legacy request) — leave it alone
+
+    const openRequests = theirRequests.filter(r => r.status === 'approved');
+    for (const r of openRequests) {
+      try {
+        await updateDoc(doc(db,'cadd_leave_requests', r.id), { status: 'revoked', revokedAt: Timestamp.now() });
+        r.status = 'revoked'; r.revokedAt = Timestamp.now();
+      } catch(e) { console.error('Self-heal: failed to close leave request', r.id, e); }
+    }
+    try {
+      await updateDoc(doc(db,'cadd_students', s.docId), { status: 'active' });
+      s.status = 'active';
+    } catch(e) { console.error('Self-heal: failed to reactivate student', s.docId, e); }
+  }
 }
 
 // ── FACULTY ACCOUNTS (login-capable, separate from old quick-label list) ──
@@ -2470,10 +2516,14 @@ window.adminRevokeStudentLeave = adminRevokeStudentLeave;
 async function restoreStudentLeave(requestId, studentDocId) {
   if (!confirm('Restore this leave to "Approved" and mark the student "On Leave" again?')) return;
   try {
-    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'approved', reviewedAt: Timestamp.now() });
+    // Restoring un-revokes an EXISTING approval — it is not a new approval, so reviewedAt
+    // must NOT be touched (this used to silently stamp today's date over the true original
+    // approval date, making a July leave look like it was approved today). Clear revokedAt
+    // since it no longer applies once restored.
+    await updateDoc(doc(db,'cadd_leave_requests',requestId), { status: 'approved', revokedAt: null });
     await updateDoc(doc(db,'cadd_students',studentDocId), { status: 'on_leave' });
     const r = allLeaveRequests.find(x => x.id === requestId);
-    if (r) { r.status = 'approved'; r.reviewedAt = Timestamp.now(); }
+    if (r) { r.status = 'approved'; r.revokedAt = null; }
     const s = allStudents.find(x => x.docId === studentDocId);
     if (s) s.status = 'on_leave';
     showToast('Leave restored — student marked "On Leave"', 'success');
