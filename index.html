@@ -1412,10 +1412,18 @@ function updateLeaveDurationLabel() {
   if (el) el.addEventListener('change', updateLeaveDurationLabel);
 });
 
+// Local-timezone date string (YYYY-MM-DD) — deliberately NOT toISOString(), which is UTC and
+// stays on yesterday's date for the first ~5.5hrs after midnight IST, silently making every
+// "has this leave ended yet" check below think a leave is still ongoing when it's already the
+// next day. Mirrors the identical helper in admin.html/faculty.html.
+function localDateStr(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 function openLeaveRequestModal() {
   document.getElementById('leaveReasonInput').value = '';
   document.getElementById('leaveReasonCount').textContent = '0';
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localDateStr(new Date());
   document.getElementById('leaveFromInput').value = todayStr;
   document.getElementById('leaveToInput').value = todayStr;
   updateLeaveDurationLabel();
@@ -1488,7 +1496,7 @@ async function loadLeaveRequestStatus() {
       // dateTo — so a student could tap it days or weeks after their leave had already ended,
       // which flipped status to 'revoked' and (before the getStudentLeaveRanges fix) wiped out
       // every already-elapsed day of an already-approved leave, turning it into "Absent".
-      const todayStr = new Date().toISOString().slice(0,10);
+      const todayStr = localDateStr(new Date()); // NOT toISOString() — UTC lags IST by up to 5.5hrs after midnight, see localDateStr's comment
       const leaveIsOver = latest.dateTo && todayStr > latest.dateTo;
       if (leaveIsOver) {
         statusText.textContent = `✅ Your leave (${range}) was approved and has ended.`;
@@ -2126,8 +2134,23 @@ async function handleAttendanceAction() {
     document.getElementById('actionCard').style.display='block';
 
     if (activeSession) {
-      await updateDoc(doc(db,'cadd_attendance',activeSession.id),{checkOut:Timestamp.now(),autoLogout:false});
-      showToast('Logged out successfully! See you next time 👋','success');
+      // Don't blindly trust Timestamp.now() here — if this session has been open long enough
+      // that checkActiveSession() would have auto-closed it on a fresh page load, but the app
+      // never reloaded in between (tab/PWA stayed alive in the background across the gap, e.g.
+      // phone just locked rather than the page actually restarting), this manual-logout path
+      // had no equivalent safety net and would happily record however much real time had
+      // actually passed — this is exactly what produced a 23.9-hour "session" once. Apply the
+      // same cap here that checkActiveSession() and admin's sweep both already apply.
+      const elapsedHrs = (Date.now() - activeSession.checkIn.seconds*1000) / 36e5;
+      if (elapsedHrs >= AUTO_LOGOUT_HRS) {
+        const autoTime = new Date(activeSession.checkIn.seconds*1000 + AUTO_LOGOUT_HRS*36e5);
+        await updateDoc(doc(db,'cadd_attendance',activeSession.id),{checkOut:Timestamp.fromDate(autoTime),autoLogout:true});
+        await autoTickCurrentSession();
+        showToast('Your previous session had already passed 3 hours, so it was auto-logged out ⚡','warning');
+      } else {
+        await updateDoc(doc(db,'cadd_attendance',activeSession.id),{checkOut:Timestamp.now(),autoLogout:false});
+        showToast('Logged out successfully! See you next time 👋','success');
+      }
       activeSession=null;
       document.getElementById('sessionBanner').style.display='none';
       document.getElementById('actionCard').style.display='none';
