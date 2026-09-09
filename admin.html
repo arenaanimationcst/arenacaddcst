@@ -1684,7 +1684,7 @@ async function healStaleOnLeaveStudents() {
     } catch(e) { console.error('Self-heal: failed to load leave requests', e); return; }
   }
 
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = localDateStr(new Date()); // NOT toISOString() — see localDateStr's comment: UTC would still show yesterday for ~5.5hrs after midnight IST, silently blocking this self-heal right when it matters most
 
   for (const s of staleCandidates) {
     const theirRequests = allLeaveRequests.filter(r => r.studentDocId === s.docId);
@@ -4002,7 +4002,7 @@ async function saveEditStudent() {
       document.getElementById('adminStudentLeaveForm').style.display = 'block';
       populateAdminStudentLeaveDropdown();
       document.getElementById('aslStudent').value = editingStudentId;
-      const todayStr = new Date().toISOString().slice(0,10);
+      const todayStr = localDateStr(new Date());
       document.getElementById('aslFrom').value = todayStr;
       document.getElementById('aslTo').value = todayStr;
       document.getElementById('aslStudent').scrollIntoView({behavior:'smooth', block:'center'});
