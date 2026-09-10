@@ -973,6 +973,7 @@
                 <option value="deactivated">Deactivated</option>
                 <option value="completed">🎓 Completed</option>
               </select>
+              <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px;color:var(--red);border-color:var(--red)" onclick="forceFixLeaveStatus(editingStudentId)" title="Use if this student is stuck &quot;On Leave&quot; and setting Status to Active + Save didn't fix it">🔧 Force Fix Stuck Leave</button>
             </div>
           </div>
           <div class="f-group f-span2" style="margin-top:14px">
@@ -1323,6 +1324,7 @@ window.resetAddForm = resetAddForm;
 window.closeModal = closeModal;
 window.switchTab = switchTab;
 window.saveEditStudent = saveEditStudent;
+window.forceFixLeaveStatus = forceFixLeaveStatus;
 window.deleteStudentConfirm = deleteStudentConfirm;
 window.openStudentModal = openStudentModal;
 window.quickStatusChange = quickStatusChange;
@@ -4065,6 +4067,51 @@ async function saveEditStudent() {
     filterStudents();
     await loadOverview();
   } catch(e){showToast('Error: '+e.message,'error');}
+}
+
+// Deliberate, explicit override for a student stuck "On Leave" that the normal fixes
+// (self-heal, or setting Status→Active and saving) couldn't resolve. Unlike those, this does
+// NOT gate on dateTo at all — it closes out every still-'approved' leave request tied to this
+// student, no matter what. It also matches by studentName as a fallback alongside
+// studentDocId, to catch a data-integrity edge case: an old leave request whose studentDocId
+// no longer lines up with this student's current record (e.g. a genuinely legacy record, or
+// the student record having been recreated at some point) would silently never match on ID
+// alone — which is exactly the kind of case both saveEditStudent()'s fix and the automatic
+// self-heal can quietly miss, since both rely on that ID matching correctly.
+async function forceFixLeaveStatus(studentDocId) {
+  const s = allStudents.find(x => x.docId === studentDocId);
+  if (!s) { showToast('Student not found', 'error'); return; }
+  if (!confirm(`Force-fix ${s.name}'s leave status? This closes out ANY of their leave requests still marked "Approved" (matched by student ID or by name), and sets them Active. Use this only if the normal fix already didn't work.`)) return;
+
+  if (!allLeaveRequests.length) {
+    try {
+      const snap = await getDocs(query(collection(db,'cadd_leave_requests'), orderBy('requestedAt','desc')));
+      allLeaveRequests = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    } catch(e) { showToast('Failed to load leave requests: ' + e.message, 'error'); return; }
+  }
+
+  const matches = allLeaveRequests.filter(r =>
+    r.status === 'approved' &&
+    (r.studentDocId === studentDocId || (r.studentName && s.name && r.studentName.trim().toLowerCase() === s.name.trim().toLowerCase()))
+  );
+
+  let fixedCount = 0;
+  for (const r of matches) {
+    try {
+      await updateDoc(doc(db,'cadd_leave_requests', r.id), { status: 'revoked', revokedAt: Timestamp.now() });
+      r.status = 'revoked'; r.revokedAt = Timestamp.now();
+      fixedCount++;
+    } catch(e) { console.error('Force-fix: failed to close leave request', r.id, e); }
+  }
+
+  try {
+    await updateDoc(doc(db,'cadd_students', studentDocId), { status: 'active' });
+    s.status = 'active';
+  } catch(e) { showToast('Failed to reactivate student: ' + e.message, 'error'); return; }
+
+  showToast(`Force-fixed: closed ${fixedCount} leave record(s) tied to ${s.name}, status set Active`, 'success');
+  renderLeaveRequests();
+  filterStudents();
 }
 
 async function deleteStudentConfirm() {
