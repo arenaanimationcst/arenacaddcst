@@ -1666,8 +1666,7 @@ async function loadStudents() {
 // stay stuck showing "On Leave" in the admin panel indefinitely — even after a refresh —
 // until either that student happened to open their own app (triggering the OTHER self-heal)
 // or an admin manually re-saved them as Active via Edit Student. Now it corrects itself right
-// here, every time the student list loads — both the lingering 'approved' leave request and
-// the student's own status field, exactly like the Edit Student fix does, just automatic.
+// here, every time the student list loads — just the student's own status field.
 // Leaves with no dateTo (legacy requests from before date ranges existed on the form) can't
 // be judged "over" from a date alone, so those are deliberately left alone here, same as the
 // student-side self-heal — those still need an explicit admin revoke.
@@ -1692,13 +1691,11 @@ async function healStaleOnLeaveStudents() {
     const stillOnLeave = !!(latest && latest.status === 'approved' && (!latest.dateTo || todayStr <= latest.dateTo));
     if (stillOnLeave) continue; // genuinely still on leave (or an undated legacy request) — leave it alone
 
-    const openRequests = theirRequests.filter(r => r.status === 'approved');
-    for (const r of openRequests) {
-      try {
-        await updateDoc(doc(db,'cadd_leave_requests', r.id), { status: 'revoked', revokedAt: Timestamp.now() });
-        r.status = 'revoked'; r.revokedAt = Timestamp.now();
-      } catch(e) { console.error('Self-heal: failed to close leave request', r.id, e); }
-    }
+    // A leave reaching this point ran its FULL, natural course — it stays 'approved' forever,
+    // exactly as applied. It is NOT "ended early" and must never be flipped to 'revoked' —
+    // that was the earlier bug (a naturally-completed single-day leave was being mislabeled
+    // "Ended early by student" purely because this self-heal ran). Only the student's own
+    // status field was ever actually broken — fix just that.
     try {
       await updateDoc(doc(db,'cadd_students', s.docId), { status: 'active' });
       s.status = 'active';
@@ -4013,18 +4010,20 @@ async function saveEditStudent() {
   }
 
   // Symmetric fix for the reverse direction: saving status as "Active" here must also close
-  // out any of this student's leave requests still sitting as 'approved'. Without this, a
-  // leave request can stay 'approved' forever — and since the student's own app now derives
-  // "am I on leave right now" purely from the leave request (not this status field, which
-  // used to be the only source of truth before the self-heal fix), it keeps showing them as
-  // on leave and re-blocking check-in the next time they open the app, completely ignoring
-  // this edit. Runs on every save-as-Active, not just prevStatus==='on_leave' — that covers
-  // an already-drifted case too, where an earlier incomplete attempt left the student doc
-  // saying 'active' while the underlying leave request was never actually closed, so a plain
-  // "it's already Active, why isn't this working" re-save fixes it rather than needing the
-  // dropdown to be flipped away and back first.
+  // out any of this student's leave requests that are still GENUINELY ONGOING (approved, and
+  // either dateless or not yet past their applied end date) — that's a real "admin is ending
+  // this early" action. A leave that already ran its full natural course must NOT be touched
+  // here — it stays 'approved' forever, exactly as applied; flipping it to 'revoked' would
+  // wrongly relabel a completed leave as "ended early" (a real bug this fixes: a naturally-
+  // finished single-day leave was getting mislabeled this way purely because this save ran
+  // after the fact). Runs on every save-as-Active, not just prevStatus==='on_leave' — that
+  // covers an already-drifted case too, where an earlier incomplete attempt left the student
+  // doc saying 'active' while the underlying leave request was never actually closed.
   if (newStatus === 'active') {
-    const openRequests = (allLeaveRequests || []).filter(r => r.studentDocId === editingStudentId && r.status === 'approved');
+    const todayStr = localDateStr(new Date());
+    const openRequests = (allLeaveRequests || []).filter(r =>
+      r.studentDocId === editingStudentId && r.status === 'approved' && (!r.dateTo || todayStr <= r.dateTo)
+    );
     for (const r of openRequests) {
       try {
         await updateDoc(doc(db,'cadd_leave_requests', r.id), { status: 'revoked', revokedAt: Timestamp.now() });
