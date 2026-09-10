@@ -1796,10 +1796,13 @@ window.logPracticeSession = logPracticeSession;
 async function loadStats() {
   const q = query(collection(db,'cadd_attendance'), where('studentDocId','==',currentStudent.docId));
   const snap = await getDocs(q);
+  // NOT capped to a recent subset — Total Hours / Days Present / Days Absent are lifetime
+  // stats and must reflect the student's FULL attendance history. A student with more
+  // sessions than any cap would silently get a wrong, ever-shrinking-relative-to-truth total
+  // — which is exactly what caused this number to disagree with admin's panel.
   const records = snap.docs
     .map(d => ({id:d.id,...d.data()}))
-    .sort((a,b) => b.checkIn.seconds - a.checkIn.seconds)
-    .slice(0, 60);
+    .sort((a,b) => b.checkIn.seconds - a.checkIn.seconds);
 
   let totalHrs = 0; const presentDays = new Set();
   records.forEach(r => {
