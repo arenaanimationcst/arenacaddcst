@@ -3852,7 +3852,12 @@ async function checkAndSendAbsenceReminders() {
 }
 
 async function loadModalAttendance(docId, s) {
-  const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',docId),limit(50));
+  // NOT limit(50) — that had no orderBy attached, so Firestore wasn't even guaranteed to
+  // return the most RECENT 50 records, just an arbitrary 50. Combined with index.html's
+  // separate (also-wrong) 60-record cap using a different selection entirely, this is why
+  // Total Hours disagreed between the student's app and this panel. Stats below now use the
+  // student's FULL attendance history; only the on-screen table is capped for display.
+  const q=query(collection(db,'cadd_attendance'),where('studentDocId','==',docId));
   const snap=await getDocs(q);
   const records=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.checkIn.seconds-a.checkIn.seconds);
 
@@ -3898,8 +3903,9 @@ async function loadModalAttendance(docId, s) {
   }
 
   const tb=document.getElementById('modalAttTable'); tb.innerHTML='';
-  if(!records.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--text3)">No records.</td></tr>';return;}
-  records.forEach(r=>{
+  const displayRecords = records.slice(0, 50); // display-only cap — stats above already used the full history
+  if(!displayRecords.length){tb.innerHTML='<tr><td colspan="4" style="color:var(--text3)">No records.</td></tr>';return;}
+  displayRecords.forEach(r=>{
     const ci=new Date(r.checkIn.seconds*1000);
     const co=r.checkOut?new Date(r.checkOut.seconds*1000):null;
     const hrs=co?((r.checkOut.seconds-r.checkIn.seconds)/3600).toFixed(1):'—';
