@@ -303,7 +303,7 @@
         <div class="stat-card"><div class="sv orange" id="ov-present">—</div><div class="sl">Present Today</div></div>
         <div class="stat-card"><div class="sv red" id="ov-leave">—</div><div class="sl">On Leave</div></div>
         <div class="stat-card"><div class="sv" id="ov-deactivated">—</div><div class="sl">Deactivated</div></div>
-        <div class="stat-card"><div class="sv" id="ov-completed">—</div><div class="sl">🎓 Completed</div></div>
+        <div class="stat-card" onclick="showPage('students');document.getElementById('filterStatus').value='completed';filterStudents();" style="cursor:pointer" title="View all completed students"><div class="sv" id="ov-completed">—</div><div class="sl">🎓 Completed</div></div>
       </div>
       <div class="card">
         <div class="card-title">Today's Check-Ins</div>
@@ -2914,12 +2914,19 @@ async function computeStudentDayLog(s, fromDateOverride, toDateOverride) {
   const snap = await getDocs(q);
   const records = snap.docs.map(d=>({id:d.id,...d.data()})).filter(r=>r.checkIn);
 
-  // Latest record per calendar day (in the rare case of more than one check-in on the same day)
+  // Latest record per calendar day drives STATUS (present/absent/etc) — one status per day
+  // makes sense. But hours must be SUMMED across every session that day, not just the latest
+  // one — a student with two sessions in a day (e.g. a second session after a break, or an
+  // accidental double check-in) would otherwise silently lose the earlier session's hours from
+  // any total built on this data. That's exactly what caused this view's Total Hours to read
+  // lower than the student's own app, which correctly sums every session.
   const recByDate = {};
+  const hoursByDate = {};
   records.forEach(r=>{
     const ds = localDateStr(new Date(r.checkIn.seconds*1000));
     const existing = recByDate[ds];
     if (!existing || r.checkIn.seconds > existing.checkIn.seconds) recByDate[ds] = r;
+    if (r.checkOut) hoursByDate[ds] = (hoursByDate[ds] || 0) + (r.checkOut.seconds - r.checkIn.seconds) / 3600;
   });
 
   const schedDays = Array.isArray(s.attendanceDays) ? s.attendanceDays.map(Number) : [];
@@ -2951,7 +2958,7 @@ async function computeStudentDayLog(s, fromDateOverride, toDateOverride) {
     } else {
       status = 'absent';
     }
-    log.push({ date: new Date(cursor), status, record: rec || null });
+    log.push({ date: new Date(cursor), status, record: rec || null, dayHours: hoursByDate[ds] || 0 });
     cursor.setDate(cursor.getDate()+1);
   }
   return log.reverse(); // most recent first
@@ -2990,9 +2997,7 @@ function renderDayLogSummary() {
   currentDayLog.forEach(d => {
     const key = d.status === 'present-active' ? 'present' : d.status;
     if (counts[key] !== undefined) counts[key]++;
-    if (d.record && d.record.checkOut) {
-      totalHrs += (d.record.checkOut.seconds - d.record.checkIn.seconds) / 3600;
-    }
+    totalHrs += d.dayHours || 0;
   });
   document.getElementById('dayLogSummary').innerHTML = `
     <div class="att-stat"><div class="av green">${counts.present}</div><div class="al">Present</div></div>
@@ -3016,7 +3021,7 @@ function renderDayLog() {
         ci = new Date(d.record.checkIn.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
         if (d.record.checkOut) {
           co = new Date(d.record.checkOut.seconds*1000).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) + (d.record.autoLogout ? ' ⚡' : '');
-          hrs = ((d.record.checkOut.seconds - d.record.checkIn.seconds) / 3600).toFixed(1) + 'h';
+          hrs = (d.dayHours || 0).toFixed(1) + 'h'; // sum of ALL sessions that day, not just the latest — matches the summary total above
         } else {
           co = '—';
           hrs = '<span style="color:var(--green)">Active</span>';
@@ -3395,9 +3400,11 @@ function filterStudents() {
 
 async function quickStatusChange(docId, status) {
   if(!status) return;
-  await updateDoc(doc(db,'cadd_students',docId),{status});
+  const updates = {status};
+  if (status === 'completed') { updates.completedAt = Timestamp.now(); updates.completedBy = 'Admin'; }
+  await updateDoc(doc(db,'cadd_students',docId),updates);
   const s=allStudents.find(x=>x.docId===docId);
-  if(s) s.status=status;
+  if(s) Object.assign(s, updates);
   filterStudents();
   showToast('Status updated to '+status.replace('_',' '),'success');
 }
@@ -4050,6 +4057,10 @@ async function saveEditStudent() {
     status:newStatus,
     attendanceDays:Array.from(ed_selectedDays).sort()
   };
+  if (newStatus === 'completed' && prevStatus !== 'completed') {
+    data.completedAt = Timestamp.now();
+    data.completedBy = 'Admin';
+  }
   if (admDateVal) data.admissionDate = Timestamp.fromDate(new Date(admDateVal));
   // Explicitly set to null (not skipped) when cleared, so admin can remove a validity
   // restriction entirely — a missing/null validityEndDate means "no restriction" everywhere
