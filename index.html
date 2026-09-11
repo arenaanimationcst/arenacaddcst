@@ -686,6 +686,18 @@
     <button class="btn-signout" onclick="doLogout()">Sign Out</button>
   </div>
 
+  <!-- COURSE COMPLETED SCREEN — shown instead of the normal dashboard once a student's
+       status is 'completed'. Deliberately its own separate screen, not a banner layered on
+       top of the normal dashboard, so nothing else (attendance, leave, feedback) is even
+       reachable underneath it. -->
+  <div id="courseCompletedScreen" style="display:none;max-width:440px;margin:0 auto;padding:60px 24px;text-align:center">
+    <div style="font-size:56px;margin-bottom:16px">🎓</div>
+    <h2 style="color:var(--text-primary);font-family:'Rajdhani',sans-serif;font-size:26px;margin-bottom:10px">Congratulations, <span id="ccStudentName">there</span>!</h2>
+    <p style="color:var(--text-secondary);font-size:15px;line-height:1.7;margin-bottom:6px">You've successfully completed your course at CADDesk CST.</p>
+    <p style="color:var(--text-secondary);font-size:15px;line-height:1.7;margin-bottom:28px">Your certificate is being processed and will be delivered to you shortly. Thank you for learning with us!</p>
+    <button class="btn-signout" onclick="doLogout()" style="position:static">Sign Out</button>
+  </div>
+
 </div>
 
 <!-- LEAVE REQUEST MODAL -->
@@ -1123,6 +1135,14 @@ async function doLogin() {
       showToast('Your account has been deactivated. Contact admin.', 'error');
       btn.disabled=false; btn.textContent='Login →'; return;
     }
+    if (currentStudent.status === 'completed') {
+      sessionStorage.setItem('cadd_student_docId', currentStudent.docId); // still let session-restore recognize them
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('ccStudentName').textContent = currentStudent.name;
+      document.getElementById('courseCompletedScreen').style.display='block';
+      btn.disabled=false; btn.textContent='Login →';
+      return;
+    }
     const validity = getValidityStatus(currentStudent.validityEndDate);
     if (validity.state === 'expired') {
       sessionStorage.setItem('cadd_student_docId', currentStudent.docId); // still let session-restore recognize them (so re-checking after admin extends works instantly)
@@ -1153,6 +1173,12 @@ async function tryRestoreSession() {
     if (docSnap.exists()) {
       currentStudent = { docId: docSnap.id, ...docSnap.data() };
       if (currentStudent.status === 'deactivated') { sessionStorage.removeItem('cadd_student_docId'); return; }
+      if (currentStudent.status === 'completed') {
+        document.getElementById('loginScreen').style.display='none';
+        document.getElementById('ccStudentName').textContent = currentStudent.name;
+        document.getElementById('courseCompletedScreen').style.display='block';
+        return;
+      }
       const validity = getValidityStatus(currentStudent.validityEndDate);
       if (validity.state === 'expired') {
         document.getElementById('loginScreen').style.display='none';
@@ -2221,6 +2247,8 @@ function doLogout() {
   sessionStorage.removeItem('cadd_student_docId');
   if (clockInterval) clearInterval(clockInterval);
   document.getElementById('dashboard').style.display='none';
+  document.getElementById('courseCompletedScreen').style.display='none';
+  document.getElementById('validityExpiredScreen').style.display='none';
   document.getElementById('loginScreen').style.display='block';
   document.getElementById('loginBtn').disabled=false;
   document.getElementById('loginBtn').textContent='Login →';
